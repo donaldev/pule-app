@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "Pule",
+  "short_name": "Pule",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0B100D",
+  "theme_color": "#0B100D",
+  "description": "Pool scoring, match history and personal statistics.",
+  "icons": [
+    { "src": "/pwa/pule-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa/pule-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa/pule-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

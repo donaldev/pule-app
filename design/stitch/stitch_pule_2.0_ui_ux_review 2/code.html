@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>pule. — Billiards Analytics &amp; Match Hub</title>
+<!-- Fonts: EB Garamond & Hanken Grotesk -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&amp;family=Hanken+Grotesk:ital,wght@0,300..900;1,300..900&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration verbatim from theme -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-dim": "#121413",
+            "on-secondary-container": "#90c3ab",
+            "on-tertiary-fixed-variant": "#4e453e",
+            "surface": "#121413",
+            "tertiary-fixed": "#eee0d6",
+            "surface-bright": "#383a38",
+            "on-tertiary-container": "#453c35",
+            "surface-container-highest": "#333534",
+            "on-error": "#690005",
+            "primary": "#e8c181",
+            "tertiary": "#d2c4bb",
+            "error": "#ffb4ab",
+            "inverse-on-surface": "#2f3130",
+            "tertiary-fixed-dim": "#d2c4bb",
+            "surface-container-high": "#282a29",
+            "secondary-container": "#20523e",
+            "on-error-container": "#ffdad6",
+            "on-primary": "#422c00",
+            "on-secondary": "#003827",
+            "outline": "#9a8f81",
+            "primary-fixed-dim": "#e8c181",
+            "on-background": "#e2e3e0",
+            "secondary-fixed-dim": "#9ed2b8",
+            "surface-container-low": "#1a1c1b",
+            "secondary": "#9ed2b8",
+            "surface-variant": "#333534",
+            "on-surface-variant": "#d1c5b5",
+            "background": "#121413",
+            "inverse-primary": "#775924",
+            "surface-container-lowest": "#0d0f0e",
+            "on-primary-fixed": "#271900",
+            "surface-tint": "#e8c181",
+            "on-primary-container": "#523904",
+            "primary-container": "#c8a366",
+            "on-tertiary": "#372f29",
+            "secondary-fixed": "#b9eed4",
+            "on-tertiary-fixed": "#211a15",
+            "outline-variant": "#4e463a",
+            "on-surface": "#e2e3e0",
+            "tertiary-container": "#b3a69e",
+            "surface-container": "#1e201f",
+            "on-primary-fixed-variant": "#5d420e",
+            "inverse-surface": "#e2e3e0",
+            "error-container": "#93000a",
+            "primary-fixed": "#ffdeab",
+            "on-secondary-fixed": "#002115",
+            "on-secondary-fixed-variant": "#1e4f3c"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-lg": "1.5rem",
+            "margin-mobile": "1.25rem",
+            "gutter-mobile": "0.75rem",
+            "gutter": "1.5rem",
+            "space-xl": "2.5rem",
+            "space-xs": "0.25rem",
+            "space-sm": "0.5rem",
+            "margin": "3rem",
+            "space-md": "1rem"
+          },
+          "fontFamily": {
+            "body-sm": ["Hanken Grotesk"],
+            "headline-md": ["EB Garamond"],
+            "headline-lg": ["EB Garamond"],
+            "label-sm": ["Hanken Grotesk"],
+            "label-md": ["Hanken Grotesk"],
+            "headline-sm": ["EB Garamond"],
+            "headline-lg-mobile": ["EB Garamond"],
+            "body-md": ["Hanken Grotesk"],
+            "body-lg": ["Hanken Grotesk"],
+            "display-lg-mobile": ["EB Garamond"],
+            "display-lg": ["EB Garamond"]
+          },
+          "fontSize": {
+            "body-sm": ["13px", { "lineHeight": "18px", "letterSpacing": "0.005em", "fontWeight": "400" }],
+            "headline-md": ["26px", { "lineHeight": "34px", "letterSpacing": "-0.01em", "fontWeight": "500" }],
+            "headline-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.015em", "fontWeight": "500" }],
+            "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.12em", "fontWeight": "700" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.08em", "fontWeight": "600" }],
+            "headline-sm": ["20px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "600" }],
+            "headline-lg-mobile": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "500" }],
+            "body-md": ["15px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "400" }],
+            "body-lg": ["17px", { "lineHeight": "26px", "letterSpacing": "-0.005em", "fontWeight": "400" }],
+            "display-lg-mobile": ["38px", { "lineHeight": "44px", "letterSpacing": "-0.01em", "fontWeight": "400" }],
+            "display-lg": ["56px", { "lineHeight": "64px", "letterSpacing": "-0.02em", "fontWeight": "400" }]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    /* Billiard Heritage Specific Texture & Gradients */
+    .felt-surface {
+      background: radial-gradient(circle at 50% 35%, #184632 0%, #112d21 65%, #0b1f16 100%);
+      box-shadow: inset 0 2px 14px rgba(0, 0, 0, 0.7);
+    }
+    .cushion-wood {
+      background: linear-gradient(180deg, #32261b 0%, #201912 100%);
+      box-shadow: inset 0 1px 0 rgba(232, 193, 129, 0.15), 0 2px 6px rgba(0,0,0,0.6);
+    }
+    .brass-glow {
+      box-shadow: 0 4px 20px rgba(200, 163, 102, 0.22);
+    }
+    .recessed-groove {
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.65);
+    }
+    .gold-amber-bloom {
+      filter: drop-shadow(0 0 6px rgba(232, 193, 129, 0.45));
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface antialiased selection:bg-primary selection:text-on-primary min-h-screen flex flex-col">
+<!-- TOP NAVIGATION BAR (Shared Components JSON Anchor with Strict Fidelity) -->
+<header class="bg-surface border-b border-outline-variant/30 shadow-sm sticky top-0 z-50">
+<div class="w-full px-6 lg:px-12 max-w-[1320px] mx-auto flex items-center justify-between h-20">
+<!-- Brand & Live Score Status -->
+<div class="flex items-center gap-6">
+<a class="font-headline-md text-headline-md italic tracking-tight text-primary flex items-baseline" href="#">
+          pule<span class="text-primary-container font-headline-lg text-headline-lg not-italic">.</span>
+</a>
+<!-- Live Venue Match Pill -->
+<div class="hidden xl:flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-surface-container-high border border-outline-variant/50">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Live Night · Sneaky Pete's</span>
+<span class="h-3 w-[1px] bg-outline-variant"></span>
+<span class="font-label-md text-label-md text-primary">Donal 16 – Sean 16</span>
+</div>
+</div>
+<!-- Navigation Links from Shared Components JSON -->
+<!-- Active Tab Logic: Screen is "Stats & Analytics", mapped from JSON links array -->
+<nav class="hidden md:flex items-center space-x-6 lg:space-x-8">
+<a class="text-on-surface-variant font-label-md text-label-md pb-1 tracking-wider uppercase hover:text-on-surface transition-colors duration-200" href="#">Home</a>
+<a class="text-on-surface-variant font-label-md text-label-md pb-1 tracking-wider uppercase hover:text-on-surface transition-colors duration-200" href="#">Live Scoring</a>
+<a class="border-b-2 border-primary text-primary font-label-md text-label-md pb-1 tracking-wider uppercase" href="#">Stats &amp; Analytics</a>
+<a class="text-on-surface-variant font-label-md text-label-md pb-1 tracking-wider uppercase hover:text-on-surface transition-colors duration-200" href="#">Rivalries</a>
+<a class="text-on-surface-variant font-label-md text-label-md pb-1 tracking-wider uppercase hover:text-on-surface transition-colors duration-200" href="#">Records &amp; Heatmap</a>
+<a class="text-on-surface-variant font-label-md text-label-md pb-1 tracking-wider uppercase hover:text-on-surface transition-colors duration-200" href="#">Account</a>
+</nav>
+<!-- Trailing Action Cluster -->
+<div class="flex items-center gap-3">
+<!-- New Frame Action -->
+<button class="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-outline-variant text-on-surface font-label-md text-label-md tracking-wider uppercase hover:border-primary transition-colors active:scale-[0.99]">
+<span class="material-symbols-outlined text-[16px]">add_circle</span>
+          New Frame
+        </button>
+<!-- Primary Action: Resume Match -->
+<button class="px-4 py-2 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md tracking-wider uppercase brass-glow hover:bg-primary transition-all active:scale-[0.99] flex items-center gap-1.5">
+          Resume Match
+          <span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+<!-- Trailing Icons -->
+<div class="flex items-center pl-2 border-l border-outline-variant/40 gap-1 text-on-surface-variant">
+<button class="p-2 rounded-lg hover:text-primary transition-colors duration-200" title="Notifications">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 rounded-lg hover:text-primary transition-colors duration-200" title="Settings">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-secondary-container border border-outline-variant/60 flex items-center justify-center ml-1 text-secondary font-label-md text-label-md" title="Player Profile Avatar">
+            D
+          </div>
+</div>
+</div>
+</div>
+</header>
+<!-- MAIN DASHBOARD CONTAINER -->
+<main class="w-full max-w-[1320px] mx-auto px-6 lg:px-12 py-8 flex-1 flex flex-col gap-8">
+<!-- SUBHEADER / VIEW SWITCHER -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-outline-variant/20 pb-5">
+<div>
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-primary">Athletic Intelligence System</span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/40"></span>
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-outline">Billiards Parlor Grade</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg tracking-tight text-on-background mt-1">Player Form &amp; Lifetime Analytics</h1>
+</div>
+<!-- Segmented View Filter Tabs -->
+<div class="flex items-center p-1 bg-surface-container-lowest border border-outline-variant/40 rounded-lg">
+<button class="px-5 py-1.5 rounded bg-primary text-on-primary font-label-md text-label-md shadow-sm">My Stats</button>
+<button class="px-5 py-1.5 rounded text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors">Rivalries</button>
+<button class="px-5 py-1.5 rounded text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors">Leaderboards</button>
+</div>
+</div>
+<!-- ROW 1: THE HEAD-TO-HEAD FELT CARD & PERFORMANCE OVER TIME (Bento Grid 12-col) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- LEFT: Hero Baize Felt Card (#163e2e equivalent) with Rivalry Momentum -->
+<div class="lg:col-span-5 bg-[#143224] rounded-xl border border-[#274235] p-6 flex flex-col justify-between shadow-lg relative overflow-hidden">
+<!-- Ambient felt texture bloom -->
+<div class="absolute -right-16 -top-16 w-48 h-48 rounded-full bg-[#1b4d3a]/40 blur-3xl pointer-events-none"></div>
+<div>
+<!-- Header with Player Name & Info -->
+<div class="flex items-center justify-between pb-4 border-b border-[#274235]">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-[#0a1e15] border border-secondary/40 flex items-center justify-center text-secondary font-headline-sm text-headline-sm">
+                D
+              </div>
+<div>
+<h2 class="font-headline-md text-headline-md leading-tight text-on-background">Donal</h2>
+<p class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Master Series · Left Cue</p>
+</div>
+</div>
+<button class="text-secondary/70 hover:text-secondary p-1" title="Metrics Definition">
+<span class="material-symbols-outlined text-[20px]">info</span>
+</button>
+</div>
+<!-- Big Stat Columns: Won / Lost / Drawn -->
+<div class="grid grid-cols-3 gap-3 my-6">
+<div class="bg-[#0e241a] rounded-lg p-3.5 border border-[#1e3d2f] text-center">
+<span class="block font-label-sm text-label-sm uppercase tracking-wider text-secondary">Won</span>
+<span class="block font-headline-lg text-headline-lg text-on-background mt-1 font-semibold">19</span>
+<span class="block font-label-sm text-label-sm text-outline mt-0.5">Nights</span>
+</div>
+<div class="bg-[#0e241a] rounded-lg p-3.5 border border-[#1e3d2f] text-center">
+<span class="block font-label-sm text-label-sm uppercase tracking-wider text-outline">Lost</span>
+<span class="block font-headline-lg text-headline-lg text-on-background mt-1 font-semibold">13</span>
+<span class="block font-label-sm text-label-sm text-outline mt-0.5">Nights</span>
+</div>
+<div class="bg-[#0e241a] rounded-lg p-3.5 border border-[#1e3d2f] text-center">
+<span class="block font-label-sm text-label-sm uppercase tracking-wider text-primary">Drawn</span>
+<span class="block font-headline-lg text-headline-lg text-primary mt-1 font-semibold">5</span>
+<span class="block font-label-sm text-label-sm text-outline mt-0.5">Nights</span>
+</div>
+</div>
+<!-- Macro Tally Indicators -->
+<div class="grid grid-cols-2 gap-4 py-2 border-t border-[#274235]">
+<div>
+<div class="font-headline-md text-headline-md text-on-background font-medium">37</div>
+<div class="font-body-sm text-body-sm text-secondary/80">nights played</div>
+</div>
+<div>
+<div class="font-headline-md text-headline-md text-primary font-medium">59.4%</div>
+<div class="font-body-sm text-body-sm text-secondary/80">night win rate</div>
+</div>
+</div>
+<div class="font-label-sm text-label-sm text-outline pt-2">Night win rate excludes drawn sessions.</div>
+</div>
+<!-- Momentum Tug-of-War Bar (Total Lifetime Frames share) -->
+<div class="mt-6 pt-4 border-t border-[#274235]">
+<div class="flex justify-between items-baseline mb-2">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Donal (407 Frames · 53.7%)</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Sean (351 Frames · 46.3%)</span>
+</div>
+<div class="w-full h-3 rounded-full bg-[#0a1c14] overflow-hidden flex p-0.5 border border-[#1b3d2c]">
+<div class="h-full bg-gradient-to-r from-primary to-primary-container rounded-l-full" style="width: 53.7%"></div>
+<div class="h-full bg-gradient-to-r from-outline-variant to-[#453c35] rounded-r-full" style="width: 46.3%"></div>
+</div>
+<div class="flex justify-between items-center mt-2 text-outline font-label-sm text-label-sm">
+<span>Primary Nemesis H2H Share</span>
+<span class="text-primary font-medium">+56 Frame Delta</span>
+</div>
+</div>
+</div>
+<!-- RIGHT: Interactive Win-Rate Performance Over Time (Walnut Card #181A19) -->
+<div class="lg:col-span-7 bg-surface-container-low rounded-xl border border-outline-variant/40 p-6 flex flex-col justify-between shadow-lg">
+<!-- Header & Time Range Controls -->
+<div>
+<div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="font-headline-md text-headline-md text-on-surface">Performance over time</h2>
+<span class="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-label-sm text-label-sm uppercase">Parchment Index</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Completed head-to-head nights · win rate excludes draws</p>
+</div>
+<!-- Active Win Rate Callout & Segment Switcher -->
+<div class="flex items-center gap-4">
+<div class="text-right">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline block">Cumulative</span>
+<span class="font-headline-lg text-headline-lg text-primary leading-none font-semibold">59.4%</span>
+</div>
+<div class="flex items-center bg-surface-container-lowest p-1 rounded-lg border border-outline-variant/50">
+<button class="px-3 py-1 rounded text-on-surface-variant font-label-md text-label-md hover:text-on-surface">Recent</button>
+<button class="px-3 py-1 rounded bg-[#26201b] border border-outline-variant/60 text-primary font-label-md text-label-md shadow-inner">All</button>
+</div>
+</div>
+</div>
+<!-- SVG Chart Area with Recessed Well styling -->
+<div class="w-full bg-surface-container-lowest/80 rounded-lg p-4 border border-outline-variant/30 recessed-groove relative">
+<!-- League Parity 50% dotted baseline label -->
+<div class="absolute right-4 top-[50%] -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
+<span class="w-2 h-2 rounded-full bg-outline/50"></span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline/80">50% Parity Line</span>
+</div>
+<svg class="w-full h-48 overflow-visible" preserveaspectratio="none" viewbox="0 0 760 220">
+<defs>
+<lineargradient id="curveFill" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#c8a366" stop-opacity="0.25"></stop>
+<stop offset="100%" stop-color="#c8a366" stop-opacity="0.0"></stop>
+</lineargradient>
+</defs>
+<!-- Grid reference lines -->
+<line opacity="0.3" stroke="#4e463a" stroke-dasharray="3 3" stroke-width="0.75" x1="40" x2="740" y1="20" y2="20"></line>
+<text class="font-label-sm text-[10px]" fill="#9a8f81" x="10" y="24">100%</text>
+<line opacity="0.45" stroke="#9a8f81" stroke-dasharray="4 4" stroke-width="1" x1="40" x2="740" y1="105" y2="105"></line>
+<text class="font-label-sm text-[10px]" fill="#9a8f81" x="15" y="109">50%</text>
+<line opacity="0.5" stroke="#4e463a" stroke-width="0.75" x1="40" x2="740" y1="190" y2="190"></line>
+<text class="font-label-sm text-[10px]" fill="#9a8f81" x="20" y="194">0%</text>
+<!-- Target Area & Curve Area -->
+<path d="M 50 20 L 70 120 L 90 160 L 115 130 L 140 145 L 175 145 L 210 125 L 245 138 L 280 125 L 315 140 L 350 130 L 390 120 L 435 110 L 480 115 L 530 102 L 580 98 L 635 106 L 685 102 L 720 105 L 720 190 L 50 190 Z" fill="url(#curveFill)"></path>
+<!-- Main Trajectory Line -->
+<path d="M 50 20 L 70 120 L 90 160 L 115 130 L 140 145 L 175 145 L 210 125 L 245 138 L 280 125 L 315 140 L 350 130 L 390 120 L 435 110 L 480 115 L 530 102 L 580 98 L 635 106 L 685 102 L 720 105" fill="none" stroke="#e8c181" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.75"></path>
+<!-- Inspection Drop Point: 3 Nov Record Node -->
+<line stroke="#e8c181" stroke-dasharray="3 3" stroke-width="1.2" x1="720" x2="720" y1="20" y2="190"></line>
+<circle class="gold-amber-bloom" cx="720" cy="105" fill="#e8c181" r="5" stroke="#121413" stroke-width="2"></circle>
+<!-- Intermediate Highlight Point (16 Jul) -->
+<circle cx="390" cy="120" fill="#c8a366" r="3.5"></circle>
+</svg>
+<!-- X-Axis Timeline Dates -->
+<div class="flex justify-between items-center pt-2 px-6 font-label-sm text-label-sm text-outline">
+<span>5 Jan 2026</span>
+<span class="text-on-surface-variant font-medium">16 Jul 2026 (54.2%)</span>
+<span class="text-primary font-medium">3 Nov 2026 (59.4%)</span>
+</div>
+</div>
+</div>
+<!-- Selected Snapshot Ledger Entry -->
+<div class="mt-4 pt-3 border-t border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-body-sm">
+<div class="flex items-center gap-3">
+<span class="w-2.5 h-2.5 rounded bg-primary"></span>
+<div>
+<span class="font-headline-sm text-headline-sm text-on-surface">3 Nov 2026</span>
+<span class="text-outline font-label-md text-label-md ml-2">· Draw vs Sean (16 – 16)</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">19 W / 32 Decisions</span>
+<button class="text-primary hover:underline font-label-md text-label-md inline-flex items-center gap-1">
+              View frame timeline
+              <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- RECENT 10 NIGHTS INTERACTIVE RIBBON -->
+<div class="bg-surface-container-low rounded-xl border border-outline-variant/40 p-5 shadow">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Last 10 Nights Trajectory</h3>
+<p class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Chronological Match Nights · Newest → Oldest</p>
+</div>
+<div class="flex items-center gap-3 text-label-sm font-label-sm">
+<span class="flex items-center gap-1 text-secondary"><span class="w-2.5 h-2.5 rounded bg-[#163e2e] border border-[#274235] inline-block"></span> Won (6)</span>
+<span class="flex items-center gap-1 text-[#ffb4ab]"><span class="w-2.5 h-2.5 rounded bg-[#331c19] border border-outline-variant inline-block"></span> Lost (3)</span>
+<span class="flex items-center gap-1 text-primary"><span class="w-2.5 h-2.5 rounded bg-[#3d2f17] border border-primary/40 inline-block"></span> Draw (1)</span>
+</div>
+</div>
+<!-- 10 Night Horizontal Pill Ribbon -->
+<div class="grid grid-cols-5 md:grid-cols-10 gap-2.5 pt-1">
+<!-- 1: Draw (Latest) -->
+<div class="group relative flex flex-col items-center justify-center p-3 rounded-lg bg-[#274235] border-2 border-primary/70 transition-all hover:scale-105 cursor-pointer shadow">
+<span class="font-label-md text-label-md font-bold text-on-background">D</span>
+<span class="font-label-sm text-[9px] text-primary mt-1">3 Nov</span>
+<!-- Micro Tooltip on hover -->
+<div class="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center pointer-events-none z-20">
+<div class="bg-surface-bright text-on-surface text-[11px] py-1 px-2.5 rounded border border-outline-variant whitespace-nowrap shadow-md">
+              vs Sean · 16-16 Tie
+            </div>
+</div>
+</div>
+<!-- 2: Win -->
+<div class="flex flex-col items-center justify-center p-3 rounded-lg bg-[#163e2e] border border-[#274235] hover:border-secondary transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-secondary">W</span>
+<span class="font-label-sm text-[9px] text-outline mt-1">28 Oct</span>
+</div>
+<!-- 3: Loss -->
+<div class="flex flex-col items-center justify-center p-3 rounded-lg bg-[#261816] border border-outline-variant/60 hover:border-error transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-[#ffb4ab]">L</span>
+<span class="font-label-sm text-[9px] text-outline mt-1">20 Oct</span>
+</div>
+<!-- 4: Win -->
+<div class="flex flex-col items-center justify-center p-3 rounded-lg bg-[#163e2e] border border-[#274235] hover:border-secondary transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-secondary">W</span>
+<span class="font-label-sm text-[9px] text-outline mt-1">14 Oct</span>
+</div>
+<!-- 5: Loss -->
+<div class="flex flex-col items-center justify-center p-3 rounded-lg bg-[#261816] border border-outline-variant/60 hover:border-error transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-[#ffb4ab]">L</span>
+<span class="font-label-sm text-[9px] text-outline mt-1">05 Oct</span>
+</div>
+<!-- 6: Win -->
+<div class="flex flex-col items-center justify-center p-3 rounded-lg bg-[#163e2e] border border-[#274235] hover:border-secondary transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-secondary">W</span>
+<span class="font-label-sm text-[9px] text-outline mt-1">29 Sep</span>
+</div>
+<!-- 7: Win -->
+<div class="flex flex-col items-center justify-center p-3 rounded-lg bg-[#163e2e] border border-[#274235] hover:border-secondary transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-secondary">W</span>
+<span class="font-label-sm text-[9px] text-outline mt-1">21 Sep</span>
+</div>
+<!-- 8: Win -->
+<div class="flex flex-col items-center justify-center p-3 rounded-lg bg-[#163e2e] border border-[#274235] hover:border-secondary transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-secondary">W</span>
+<span class="font-label-sm text-[9px] text-outline mt-1">12 Sep</span>
+</div>
+<!-- 9: Loss -->
+<div class="flex flex-col items-center justify-center p-3 rounded-lg bg-[#261816] border border-outline-variant/60 hover:border-error transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-[#ffb4ab]">L</span>
+<span class="font-label-sm text-[9px] text-outline mt-1">04 Sep</span>
+</div>
+<!-- 10: Win -->
+<div class="flex flex-col items-center justify-center p-3 rounded-lg bg-[#163e2e] border border-[#274235] hover:border-secondary transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-secondary">W</span>
+<span class="font-label-sm text-[9px] text-outline mt-1">28 Aug</span>
+</div>
+</div>
+</div>
+<!-- ROW 2: THE BILLIARDS TABLE POCKET HEATMAP & DRILL-DOWN PANEL -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- LEFT: Billiards Table Top-Down Tactical Board (8 Cols) -->
+<div class="lg:col-span-8 bg-surface-container-low rounded-xl border border-outline-variant/40 p-6 flex flex-col justify-between shadow-lg">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-outline-variant/30 gap-2">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Black-ball pockets in your wins</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">236 recorded winning 8-ball clearances · Interactive distribution map</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2.5 py-1 rounded bg-[#274235] border border-secondary/40 text-secondary font-label-sm text-label-sm uppercase tracking-wider">Top Right: 22.9% Peak</span>
+</div>
+</div>
+<!-- Billiard Table Canvas Container -->
+<div class="my-6 p-4 sm:p-6 bg-[#16120e] rounded-xl border-4 border-[#32261b] shadow-2xl relative">
+<!-- Slate Timber Rim -->
+<div class="cushion-wood rounded-lg p-5 border border-[#3e2e21] relative">
+<!-- Felt Table Bed -->
+<div class="felt-surface rounded h-72 sm:h-80 w-full relative flex items-center justify-center border-4 border-[#123122]">
+<!-- Baize baulk line and head spot subtle markings -->
+<div class="absolute left-1/4 top-0 bottom-0 w-[1px] bg-white/10"></div>
+<div class="absolute left-1/4 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white/20"></div>
+<div class="absolute right-1/4 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white/20"></div>
+<!-- POCKET 1: Top Left Corner (15.7%) -->
+<div class="absolute -top-3.5 -left-3.5 flex flex-col items-center">
+<div class="w-12 h-12 rounded-full bg-[#121413] border-2 border-outline-variant/80 flex items-center justify-center shadow-lg hover:border-primary transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-on-surface">15.7%</span>
+</div>
+</div>
+<!-- POCKET 2: Top Center / Middle (14.0%) -->
+<div class="absolute -top-3.5 left-1/2 -translate-x-1/2 flex flex-col items-center">
+<div class="w-12 h-12 rounded-full bg-[#121413] border-2 border-outline-variant/80 flex items-center justify-center shadow-lg hover:border-primary transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-on-surface">14.0%</span>
+</div>
+</div>
+<!-- POCKET 3: Top Right Corner (22.9% - Primary Selected Hotspot) -->
+<div class="absolute -top-3.5 -right-3.5 flex flex-col items-center">
+<div class="w-13 h-13 p-1 rounded-full bg-primary/20 animate-pulse">
+<div class="w-12 h-12 rounded-full bg-[#1e170c] border-2 border-primary flex items-center justify-center shadow-xl brass-glow cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-primary">22.9%</span>
+</div>
+</div>
+<span class="mt-1 font-label-sm text-[9px] uppercase tracking-wider text-primary font-bold">Favorite</span>
+</div>
+<!-- Center 8-Ball Iconography resting near top right corridor -->
+<div class="absolute top-[48%] right-[32%] w-10 h-10 rounded-full bg-black border border-neutral-700 shadow-2xl flex items-center justify-center transform hover:scale-110 transition-transform cursor-pointer">
+<div class="w-5 h-5 rounded-full bg-white flex items-center justify-center text-black font-bold text-[11px] font-sans">
+                  8
+                </div>
+</div>
+<!-- Subtle vector cut line to favorite pocket -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+<line opacity="0.65" stroke="#e8c181" stroke-dasharray="3 3" stroke-width="1.5" x1="68%" x2="95%" y1="48%" y2="8%"></line>
+</svg>
+<!-- POCKET 4: Bottom Left Corner (15.7%) -->
+<div class="absolute -bottom-3.5 -left-3.5 flex flex-col items-center">
+<div class="w-12 h-12 rounded-full bg-[#121413] border-2 border-outline-variant/80 flex items-center justify-center shadow-lg hover:border-primary transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-on-surface">15.7%</span>
+</div>
+</div>
+<!-- POCKET 5: Bottom Center / Middle (12.3%) -->
+<div class="absolute -bottom-3.5 left-1/2 -translate-x-1/2 flex flex-col items-center">
+<div class="w-12 h-12 rounded-full bg-[#121413] border-2 border-outline-variant/80 flex items-center justify-center shadow-lg hover:border-primary transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-on-surface">12.3%</span>
+</div>
+</div>
+<!-- POCKET 6: Bottom Right Corner (19.5%) -->
+<div class="absolute -bottom-3.5 -right-3.5 flex flex-col items-center">
+<div class="w-12 h-12 rounded-full bg-[#121413] border-2 border-outline-variant/80 flex items-center justify-center shadow-lg hover:border-primary transition-all cursor-pointer">
+<span class="font-label-md text-label-md font-bold text-on-surface">19.5%</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between text-body-sm text-outline pt-2">
+<span>Click any pocket module to inspect tactical potting trends &amp; banking lines.</span>
+<span class="text-primary font-label-md text-label-md">Selected: Top-Right Pocket</span>
+</div>
+</div>
+<!-- RIGHT: Selected Pocket Detailed Diagnostic Panel (4 Cols) -->
+<div class="lg:col-span-4 bg-surface-container-low rounded-xl border border-outline-variant/40 p-6 flex flex-col justify-between shadow-lg">
+<div>
+<div class="flex items-center justify-between pb-3 border-b border-outline-variant/30">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-primary">Pocket Drill-Down</span>
+<span class="px-2 py-0.5 rounded bg-primary-container/20 text-primary border border-primary/30 font-label-sm text-label-sm font-semibold">22.9% Share</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mt-3">Top-Right Corner</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">High-percentage escape route against Sean's cluster formations.</p>
+<!-- Metrics Ledger for this pocket -->
+<div class="space-y-4 my-5">
+<div class="p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/30 flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Potted 8-Balls</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">54</span>
+</div>
+<div class="p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/30 flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Golden Breaks Delivered</span>
+<span class="font-headline-sm text-headline-sm text-secondary font-bold">8 of 9</span>
+</div>
+<div class="p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/30 flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Primary Angle</span>
+<span class="font-label-md text-label-md text-on-surface uppercase">Thin Cut (&gt;45°)</span>
+</div>
+<div class="p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/30 flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Favorite Bank Approach</span>
+<span class="font-label-md text-label-md text-on-surface uppercase">Double-Rail Long</span>
+</div>
+</div>
+</div>
+<div class="p-3.5 bg-[#172e22] rounded-lg border border-[#274235] text-secondary font-body-sm text-body-sm flex items-start gap-2.5">
+<span class="material-symbols-outlined text-[18px] text-secondary mt-0.5 shrink-0">military_tech</span>
+<span>Donal converts 81% of final-ball safety duels when pushing the cue ball to the top-right quadrant.</span>
+</div>
+</div>
+</div>
+<!-- ROW 3: BREAK & FRAME PERFORMANCE + FRAME TYPES + CAREER RECORDS -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- LEFT: Frame Types & Break Mechanics (7 Cols) -->
+<div class="lg:col-span-7 space-y-6">
+<!-- Break Performance Card with High-Contrast Bars -->
+<div class="bg-surface-container-low rounded-xl border border-outline-variant/40 p-6 shadow-lg">
+<div class="flex items-center justify-between pb-4 border-b border-outline-variant/30">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Break performance</h2>
+<span class="font-body-sm text-body-sm text-outline">206 recorded opening breaks · Season 2026</span>
+</div>
+<div class="text-right">
+<span class="font-headline-lg text-headline-lg text-primary font-bold">206</span>
+<span class="block font-label-sm text-label-sm text-outline uppercase tracking-wider">Total Breaks</span>
+</div>
+</div>
+<div class="space-y-5 my-6">
+<!-- Metric 1: Break-pot success -->
+<div>
+<div class="flex justify-between items-baseline mb-1.5">
+<span class="font-body-md text-body-md text-on-surface font-medium">Break-pot success</span>
+<div class="flex items-baseline gap-2">
+<span class="font-label-sm text-label-sm text-outline">76 / 179 breaks</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">42.5%</span>
+</div>
+</div>
+<div class="w-full h-3 rounded-full bg-surface-container-lowest border border-outline-variant/30 overflow-hidden recessed-groove">
+<div class="h-full bg-primary rounded-full transition-all duration-500" style="width: 42.5%"></div>
+</div>
+</div>
+<!-- Metric 2: Break hold -->
+<div>
+<div class="flex justify-between items-baseline mb-1.5">
+<span class="font-body-md text-body-md text-on-surface font-medium">Break hold (Win on your break)</span>
+<div class="flex items-baseline gap-2">
+<span class="font-label-sm text-label-sm text-outline">118 / 206 breaks</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">57.3%</span>
+</div>
+</div>
+<div class="w-full h-3 rounded-full bg-surface-container-lowest border border-outline-variant/30 overflow-hidden recessed-groove">
+<div class="h-full bg-primary rounded-full transition-all duration-500" style="width: 57.3%"></div>
+</div>
+</div>
+<!-- Metric 3: Break steal -->
+<div>
+<div class="flex justify-between items-baseline mb-1.5">
+<span class="font-body-md text-body-md text-on-surface font-medium">Break steal (Win on opponent's break)</span>
+<div class="flex items-baseline gap-2">
+<span class="font-label-sm text-label-sm text-outline">108 / 208 breaks</span>
+<span class="font-headline-sm text-headline-sm text-secondary font-bold">51.9%</span>
+</div>
+</div>
+<div class="w-full h-3 rounded-full bg-surface-container-lowest border border-outline-variant/30 overflow-hidden recessed-groove">
+<div class="h-full bg-secondary rounded-full transition-all duration-500" style="width: 51.9%"></div>
+</div>
+</div>
+</div>
+<!-- Bottom Micro Cards: Golden Breaks vs Break & Runs -->
+<div class="grid grid-cols-2 gap-4 pt-4 border-t border-outline-variant/30">
+<div class="p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/40 flex items-center justify-between">
+<div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Golden Breaks</span>
+<span class="block font-headline-md text-headline-md text-primary font-bold">9</span>
+</div>
+<span class="material-symbols-outlined text-primary text-[28px]">stars</span>
+</div>
+<div class="p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/40 flex items-center justify-between">
+<div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Break &amp; Runs</span>
+<span class="block font-headline-md text-headline-md text-on-surface-variant font-bold">0</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[28px]">sports_score</span>
+</div>
+</div>
+<div class="font-label-sm text-label-sm text-outline mt-2">Hold: win when breaking; Steal: win on opponent break.</div>
+</div>
+<!-- Frame Wins By Type Card -->
+<div class="bg-surface-container-low rounded-xl border border-outline-variant/40 p-6 shadow-lg">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-1">Your frame wins by type</h2>
+<span class="font-body-sm text-body-sm text-outline">Total 238 recorded frame triumphs</span>
+<div class="space-y-4 my-5">
+<!-- Normal -->
+<div>
+<div class="flex justify-between items-baseline mb-1">
+<span class="font-label-md text-label-md uppercase tracking-wider text-on-surface">Normal Clearance</span>
+<span class="font-label-md text-label-md text-primary font-bold">207 <span class="text-outline font-normal">/ 238</span></span>
+</div>
+<div class="w-full h-2.5 rounded-full bg-surface-container-lowest border border-outline-variant/30 overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 86.9%"></div>
+</div>
+</div>
+<!-- Golden Break -->
+<div>
+<div class="flex justify-between items-baseline mb-1">
+<span class="font-label-md text-label-md uppercase tracking-wider text-on-surface">Golden Break (Instant Win)</span>
+<span class="font-label-md text-label-md text-secondary font-bold">9 <span class="text-outline font-normal">/ 238</span></span>
+</div>
+<div class="w-full h-2.5 rounded-full bg-surface-container-lowest border border-outline-variant/30 overflow-hidden">
+<div class="h-full bg-secondary rounded-full" style="width: 3.8%"></div>
+</div>
+</div>
+<!-- Super Foul -->
+<div>
+<div class="flex justify-between items-baseline mb-1">
+<span class="font-label-md text-label-md uppercase tracking-wider text-on-surface">Super Foul (Awarded Frame)</span>
+<span class="font-label-md text-label-md text-outline font-bold">22 <span class="text-outline font-normal">/ 238</span></span>
+</div>
+<div class="w-full h-2.5 rounded-full bg-surface-container-lowest border border-outline-variant/30 overflow-hidden">
+<div class="h-full bg-outline rounded-full" style="width: 9.3%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT: Career Records Grid + Winning Streaks (5 Cols) -->
+<div class="lg:col-span-5 space-y-6">
+<!-- Streaks Box -->
+<div class="bg-surface-container-low rounded-xl border border-outline-variant/40 p-6 shadow-lg">
+<div class="flex items-center justify-between pb-3 border-b border-outline-variant/30">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Winning streaks</h2>
+<p class="font-label-sm text-label-sm text-outline uppercase tracking-wider">A loss or draw resets active run</p>
+</div>
+<span class="material-symbols-outlined text-primary">local_fire_department</span>
+</div>
+<div class="grid grid-cols-2 gap-4 mt-4">
+<div class="p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/30">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Current Streak</span>
+<span class="block font-headline-lg text-headline-lg text-outline font-semibold mt-1">0</span>
+<span class="font-body-sm text-body-sm text-outline">Reset on 3 Nov draw</span>
+</div>
+<div class="p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/30">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-primary">Longest Streak</span>
+<span class="block font-headline-lg text-headline-lg text-primary font-semibold mt-1">3</span>
+<span class="font-body-sm text-body-sm text-secondary">Nights uninterrupted</span>
+</div>
+</div>
+</div>
+<!-- My Records: 2x3 Compact Gallery Grid -->
+<div class="bg-surface-container-low rounded-xl border border-outline-variant/40 p-6 shadow-lg">
+<div class="flex items-center justify-between pb-4 border-b border-outline-variant/30">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">My records</h2>
+<span class="font-body-sm text-body-sm text-outline">All-time parlor milestone book</span>
+</div>
+<span class="material-symbols-outlined text-outline">trophy</span>
+</div>
+<div class="grid grid-cols-2 gap-3.5 mt-4">
+<!-- Record 1 -->
+<div class="p-3.5 bg-surface-container-lowest rounded-lg border border-outline-variant/30 hover:border-primary/40 transition-colors">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline block">Most frames in a night</span>
+<span class="font-headline-lg text-headline-lg text-primary font-bold leading-none block my-1.5">21</span>
+<span class="font-label-sm text-label-sm text-outline block">Sean · 12 Aug 2026</span>
+</div>
+<!-- Record 2 -->
+<div class="p-3.5 bg-surface-container-lowest rounded-lg border border-outline-variant/30 hover:border-primary/40 transition-colors">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline block">Biggest winning margin</span>
+<span class="font-headline-lg text-headline-lg text-primary font-bold leading-none block my-1.5">9</span>
+<span class="font-label-sm text-label-sm text-outline block">Sean · 12 Aug 2026</span>
+</div>
+<!-- Record 3 -->
+<div class="p-3.5 bg-surface-container-lowest rounded-lg border border-outline-variant/30 hover:border-primary/40 transition-colors">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline block">Closest victory</span>
+<span class="font-headline-lg text-headline-lg text-primary font-bold leading-none block my-1.5">1</span>
+<span class="font-label-sm text-label-sm text-outline block">Sean · 29 Jun 2026</span>
+</div>
+<!-- Record 4 -->
+<div class="p-3.5 bg-surface-container-lowest rounded-lg border border-outline-variant/30 hover:border-primary/40 transition-colors">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline block">Best frame run</span>
+<span class="font-headline-lg text-headline-lg text-secondary font-bold leading-none block my-1.5">7</span>
+<span class="font-label-sm text-label-sm text-outline block">Consecutive racks</span>
+</div>
+<!-- Record 5 -->
+<div class="p-3.5 bg-surface-container-lowest rounded-lg border border-outline-variant/30 hover:border-primary/40 transition-colors">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline block">Biggest comeback</span>
+<span class="font-headline-lg text-headline-lg text-primary font-bold leading-none block my-1.5">6</span>
+<span class="font-label-sm text-label-sm text-outline block">Frames behind</span>
+</div>
+<!-- Record 6 -->
+<div class="p-3.5 bg-surface-container-lowest rounded-lg border border-outline-variant/30 hover:border-primary/40 transition-colors">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline block">Wins after trailing</span>
+<span class="font-headline-lg text-headline-lg text-secondary font-bold leading-none block my-1.5">10</span>
+<span class="font-label-sm text-label-sm text-outline block">Nights saved</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- REFINED FOOTER -->
+<footer class="mt-12 bg-surface-container-lowest border-t border-outline-variant/30 py-8">
+<div class="max-w-[1320px] mx-auto px-6 lg:px-12 flex flex-col md:flex-row items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<span class="font-headline-md text-headline-md italic tracking-tight text-primary">pule.</span>
+<span class="h-4 w-[1px] bg-outline-variant/40"></span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">© 2026 Bespoke Cue Sports Intelligence · Private Billiard League</span>
+</div>
+<div class="flex items-center space-x-6 text-outline font-label-md text-label-md uppercase tracking-wider">
+<a class="hover:text-primary transition-colors" href="#">Table Calibration</a>
+<a class="hover:text-primary transition-colors" href="#">Match Ledger</a>
+<a class="hover:text-primary transition-colors" href="#">Rulebook 8-Ball</a>
+<a class="hover:text-primary transition-colors" href="#">Export CSV</a>
+</div>
+</div>
+</footer>
+</body></html>

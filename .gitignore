@@ -1,0 +1,79 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+/data/legacy/
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Credentials and local Supabase runtime
+.env
+.env.*
+!.env.example
+supabase/.temp/
+supabase/.branches/
+__pycache__/
+
+# Local hosting/tool state, credentials, backups and generated test output
+.netlify/
+.aws/
+.codex/
+.credentials/
+secrets/
+credentials.json
+service-account*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.dump
+*.backup
+*.sqlite
+*.sqlite3
+*.db
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+*.pyc
+# Safe environment templates contain placeholders only.
+!.env.*.example
+# Never include the predecessor project if copied into this directory.
+/pule_app/
+
+# Redundant exported archives and local spreadsheet/source-data snapshots
+*.zip
+*.tar
+*.tgz
+*.7z
+*.xlsx
+*.xls
+
+# Machine-specific credential stores and hosted verification snapshots
+.npmrc
+.netrc
+.envrc
+.ssh/
+.gnupg/
+/docs/HOSTED_READINESS_RESULTS.json
+/docs/TWO_TAB_CONFLICT_EVIDENCE.json

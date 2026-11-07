@@ -1,0 +1,523 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+<title>pule. — My Stats &amp; Analytics</title>
+<!-- Google Fonts: EB Garamond & Hanken Grotesk -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..700&amp;family=Hanken+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-background": "#e2e3e0",
+            "primary": "#e8c181",
+            "surface-tint": "#e8c181",
+            "surface-container-low": "#1a1c1b",
+            "on-error": "#690005",
+            "secondary-fixed-dim": "#9ed2b8",
+            "inverse-on-surface": "#2f3130",
+            "surface": "#121413",
+            "surface-dim": "#121413",
+            "outline-variant": "#4e463a",
+            "on-tertiary": "#372f29",
+            "surface-bright": "#383a38",
+            "surface-container-lowest": "#0d0f0e",
+            "on-primary-fixed": "#271900",
+            "primary-fixed": "#ffdeab",
+            "on-primary-container": "#523904",
+            "tertiary-fixed": "#eee0d6",
+            "secondary": "#9ed2b8",
+            "surface-container": "#1e201f",
+            "primary-fixed-dim": "#e8c181",
+            "on-tertiary-container": "#453c35",
+            "background": "#121413",
+            "on-surface-variant": "#d1c5b5",
+            "tertiary-container": "#b3a69e",
+            "inverse-primary": "#775924",
+            "secondary-fixed": "#b9eed4",
+            "surface-container-highest": "#333534",
+            "tertiary": "#d2c4bb",
+            "on-tertiary-fixed-variant": "#4e453e",
+            "on-primary-fixed-variant": "#5d420e",
+            "on-tertiary-fixed": "#211a15",
+            "on-error-container": "#ffdad6",
+            "inverse-surface": "#e2e3e0",
+            "on-secondary": "#003827",
+            "surface-variant": "#333534",
+            "on-surface": "#e2e3e0",
+            "tertiary-fixed-dim": "#d2c4bb",
+            "on-secondary-container": "#90c3ab",
+            "outline": "#9a8f81",
+            "on-secondary-fixed": "#002115",
+            "surface-container-high": "#282a29",
+            "primary-container": "#c8a366",
+            "on-secondary-fixed-variant": "#1e4f3c",
+            "on-primary": "#422c00",
+            "error-container": "#93000a",
+            "secondary-container": "#20523e",
+            "error": "#ffb4ab"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "gutter": "1.5rem",
+            "margin": "3rem",
+            "space-xs": "0.25rem",
+            "space-lg": "1.5rem",
+            "space-xl": "2.5rem",
+            "space-md": "1rem",
+            "gutter-mobile": "0.75rem",
+            "space-sm": "0.5rem",
+            "margin-mobile": "1.25rem"
+          },
+          "fontFamily": {
+            "headline-sm": ["EB Garamond", "serif"],
+            "headline-md": ["EB Garamond", "serif"],
+            "label-sm": ["Hanken Grotesk", "sans-serif"],
+            "body-md": ["Hanken Grotesk", "sans-serif"],
+            "body-lg": ["Hanken Grotesk", "sans-serif"],
+            "label-md": ["Hanken Grotesk", "sans-serif"],
+            "display-lg": ["EB Garamond", "serif"],
+            "display-lg-mobile": ["EB Garamond", "serif"],
+            "headline-lg": ["EB Garamond", "serif"],
+            "body-sm": ["Hanken Grotesk", "sans-serif"],
+            "headline-lg-mobile": ["EB Garamond", "serif"]
+          },
+          "fontSize": {
+            "headline-sm": ["20px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "600" }],
+            "headline-md": ["26px", { "lineHeight": "34px", "letterSpacing": "-0.01em", "fontWeight": "500" }],
+            "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.12em", "fontWeight": "700" }],
+            "body-md": ["15px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "400" }],
+            "body-lg": ["17px", { "lineHeight": "26px", "letterSpacing": "-0.005em", "fontWeight": "400" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.08em", "fontWeight": "600" }],
+            "display-lg": ["56px", { "lineHeight": "64px", "letterSpacing": "-0.02em", "fontWeight": "400" }],
+            "display-lg-mobile": ["38px", { "lineHeight": "44px", "letterSpacing": "-0.01em", "fontWeight": "400" }],
+            "headline-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.015em", "fontWeight": "500" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "letterSpacing": "0.005em", "fontWeight": "400" }],
+            "headline-lg-mobile": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "500" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    /* Subtle Parlor Felt & Timber Insets */
+    .felt-card {
+      background: radial-gradient(circle at 50% 20%, #1c3c2e 0%, #132a20 100%);
+      box-shadow: inset 0 1px 1px rgba(232, 193, 129, 0.15), 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    .timber-card {
+      background: linear-gradient(180deg, #241f1a 0%, #1b1714 100%);
+      border: 1px solid #3c332a;
+      box-shadow: inset 0 1px 0 rgba(247, 243, 238, 0.04), 0 6px 18px rgba(0, 0, 0, 0.35);
+    }
+    .pocket-table {
+      background: #15392b;
+      box-shadow: inset 0 0 18px rgba(0,0,0,0.65), inset 0 0 2px #0a1f16;
+    }
+    .brass-glow {
+      box-shadow: 0 0 16px rgba(200, 163, 102, 0.3);
+    }
+    .pb-safe {
+      padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 12px));
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface antialiased selection:bg-primary selection:text-on-primary min-h-screen flex justify-center">
+<!-- Mobile Viewport Shell (Max 420px for razor-sharp mobile preview) -->
+<div class="w-full max-w-[420px] min-h-screen bg-background flex flex-col relative pb-24 shadow-2xl">
+<!-- TopAppBar (from Shared Components JSON) -->
+<header class="bg-surface dark:bg-surface docked full-width top-0 sticky z-40 flex justify-between items-center w-full px-margin-mobile py-space-sm border-b border-outline-variant/30">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="sports_score">sports_score</span>
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold tracking-tight text-on-surface dark:text-on-surface flex items-center">
+          pule<span class="text-primary">.</span>
+</span>
+</div>
+<!-- Quick match indicator badge + notifications -->
+<div class="flex items-center gap-2.5">
+<div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-container/60 border border-secondary/30">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-secondary tracking-normal">Sneaky Pete's · 16-16</span>
+</div>
+<button aria-label="Notifications" class="text-on-surface-variant hover:text-primary transition-colors duration-150 p-1 flex items-center">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+</button>
+</div>
+</header>
+<!-- Main Content Stream -->
+<main class="flex-1 px-margin-mobile pt-3 space-y-4">
+<!-- Header & Segmented Sub-Nav -->
+<div class="space-y-3">
+<div class="flex items-baseline justify-between">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface tracking-tight">Stats</h1>
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Autumn League '26</span>
+</div>
+<!-- Segmented Tab Pills -->
+<nav aria-label="Stats navigation" class="grid grid-cols-3 p-1 rounded-full bg-surface-container-low border border-outline-variant/30 text-center">
+<button class="py-1.5 px-2 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md font-semibold transition-all">
+            My stats
+          </button>
+<button class="py-1.5 px-2 rounded-full text-on-surface-variant hover:text-primary font-label-md text-label-md transition-colors">
+            Rivalries
+          </button>
+<button class="py-1.5 px-2 rounded-full text-on-surface-variant hover:text-primary font-label-md text-label-md transition-colors">
+            Leaderboards
+          </button>
+</nav>
+</div>
+<!-- Donal Hero Overview Card -->
+<section class="felt-card rounded-xl border border-[#274235] p-4 text-on-surface relative overflow-hidden">
+<div class="flex justify-between items-start mb-3">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="font-headline-md text-headline-md font-semibold text-on-surface tracking-tight">Donal</h2>
+<span class="px-1.5 py-0.5 rounded bg-primary/20 border border-primary/40 font-label-sm text-label-sm text-primary tracking-wide">
+                MASTER II
+              </span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary-fixed-dim opacity-85">Career Head-to-Head</p>
+</div>
+<button class="text-secondary-fixed-dim/80 hover:text-primary transition-colors p-1" title="Stats Info">
+<span class="material-symbols-outlined text-[18px]" data-icon="info">info</span>
+</button>
+</div>
+<!-- Tally Trio: Won / Lost / Drawn -->
+<div class="grid grid-cols-3 gap-2 py-2 border-y border-[#274235]/80 text-center">
+<div class="flex flex-col items-center">
+<span class="font-label-sm text-label-sm uppercase text-secondary tracking-wider">Won</span>
+<span class="font-display-lg-mobile text-display-lg-mobile font-bold text-primary leading-none mt-1">19</span>
+</div>
+<div class="flex flex-col items-center border-x border-[#274235]/60">
+<span class="font-label-sm text-label-sm uppercase text-outline tracking-wider">Lost</span>
+<span class="font-display-lg-mobile text-display-lg-mobile font-bold text-on-surface leading-none mt-1">13</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="font-label-sm text-label-sm uppercase text-secondary-fixed-dim tracking-wider">Drawn</span>
+<span class="font-display-lg-mobile text-display-lg-mobile font-bold text-secondary-fixed-dim leading-none mt-1">5</span>
+</div>
+</div>
+<!-- Bottom Metric Summary -->
+<div class="grid grid-cols-2 pt-3 items-end">
+<div>
+<div class="font-headline-sm text-headline-sm text-on-surface font-semibold leading-tight">37</div>
+<div class="font-body-sm text-body-sm text-secondary-fixed-dim/70">nights played</div>
+</div>
+<div class="text-right">
+<div class="font-headline-sm text-headline-sm text-primary font-bold leading-tight">59.4%</div>
+<div class="font-body-sm text-body-sm text-secondary-fixed-dim/70">night win rate</div>
+</div>
+</div>
+<p class="font-label-sm text-label-sm text-secondary-fixed-dim/50 italic mt-2">
+          Night win rate excludes draws.
+        </p>
+</section>
+<!-- Performance Over Time Interactive Trendline Card -->
+<section class="timber-card rounded-xl p-4">
+<div class="flex justify-between items-center mb-3">
+<div>
+<h3 class="font-body-lg text-body-lg font-medium text-on-surface">Performance over time</h3>
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Night win rate trajectory</span>
+</div>
+<div class="text-right">
+<span class="font-headline-md text-headline-md font-bold text-primary leading-tight">59.4%</span>
+<div class="font-label-sm text-label-sm text-secondary-fixed-dim">Current Peak</div>
+</div>
+</div>
+<!-- Filter Toggle & Date Navigation -->
+<div class="flex justify-between items-center gap-2 mb-3">
+<div class="inline-flex rounded-lg bg-surface-container-lowest p-0.5 border border-outline-variant/40">
+<button class="px-2.5 py-1 text-on-surface-variant font-label-md text-label-md rounded">Recent</button>
+<button class="px-2.5 py-1 bg-outline-variant/50 text-primary font-label-md text-label-md rounded font-semibold border border-primary/30">All</button>
+</div>
+<!-- Date Scrubber Pill Selector -->
+<div class="flex items-center gap-1 bg-surface-container-lowest px-2 py-1 rounded-lg border border-outline-variant/40">
+<button class="text-outline hover:text-primary flex items-center p-0.5">
+<span class="material-symbols-outlined text-[16px]" data-icon="chevron_left">chevron_left</span>
+</button>
+<span class="font-label-sm text-label-sm font-medium text-on-surface px-1">3 Nov 2026</span>
+<button class="text-outline hover:text-primary flex items-center p-0.5">
+<span class="material-symbols-outlined text-[16px]" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Chart Canvas / Sparkline SVG Container -->
+<div class="relative w-full h-36 bg-surface-container-lowest/80 rounded-lg p-2 border border-outline-variant/20 overflow-hidden">
+<!-- 100%, 50%, 0% guide lines -->
+<div class="absolute inset-x-2 top-2 flex items-center justify-between text-[10px] text-outline/50 font-mono">
+<span class="">100%</span>
+<div class="flex-1 border-b border-outline-variant/20 border-dashed ml-2"></div>
+</div>
+<div class="absolute inset-x-2 top-1/2 -translate-y-1/2 flex items-center justify-between text-[10px] text-primary/60 font-mono">
+<span class="">50%</span>
+<div class="flex-1 border-b border-primary/30 border-dotted ml-3"></div>
+</div>
+<div class="absolute inset-x-2 bottom-6 flex items-center justify-between text-[10px] text-outline/50 font-mono">
+<span class="">0%</span>
+<div class="flex-1 border-b border-outline-variant/20 ml-4"></div>
+</div>
+<!-- Active Marker Vertical Dashed Line -->
+<div class="absolute right-7 top-2 bottom-6 border-r border-dotted border-primary/70"></div>
+<!-- Smooth trajectory SVG -->
+<svg class="w-full h-full pt-1 pb-6" preserveAspectRatio="none" viewBox="0 0 320 100">
+<defs>
+<linearGradient id="chartGlow" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#c8a366" stop-opacity="0.35"></stop>
+<stop offset="100%" stop-color="#c8a366" stop-opacity="0.0"></stop>
+</linearGradient>
+</defs>
+<!-- Area under line -->
+<path d="M 12 18 Q 24 82 32 86 T 52 70 T 74 72 T 95 62 T 115 67 T 136 61 T 156 65 T 176 58 T 197 59 T 225 54 T 255 53 T 292 48 L 292 90 L 12 90 Z" fill="url(#chartGlow)"></path>
+<!-- Main Path -->
+<path d="M 12 18 Q 24 82 32 86 T 52 70 T 74 72 T 95 62 T 115 67 T 136 61 T 156 65 T 176 58 T 197 59 T 225 54 T 255 53 T 292 48" fill="none" stroke="#e8c181" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+<!-- Focal Scrubber Point -->
+<circle class="brass-glow" cx="292" cy="48" fill="#121413" r="4.5" stroke="#e8c181" stroke-width="2.5"></circle>
+<circle cx="292" cy="48" fill="#e8c181" r="2"></circle>
+</svg>
+<!-- Timeline X-Axis Labels -->
+<div class="absolute inset-x-3 bottom-1.5 flex justify-between font-label-sm text-[9px] text-outline">
+<span class="">5 Jan</span>
+<span class="">16 Jul</span>
+<span class="text-primary font-semibold">3 Nov</span>
+</div>
+</div>
+<!-- Detail Sub-Card of Selected Match -->
+<div class="mt-3 p-2.5 rounded-lg bg-surface-container-lowest border border-outline-variant/30 flex justify-between items-center">
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">3 Nov 2026</span>
+<span class="px-1.5 py-0.2 rounded bg-secondary-container text-secondary text-[10px] font-label-sm uppercase">Draw · Sean</span>
+</div>
+<div class="font-label-sm text-label-sm text-outline mt-0.5">Donal 16 · Sean 16 (32 frames total)</div>
+</div>
+<div class="text-right">
+<span class="font-label-md text-label-md font-bold text-primary">19W / 13L</span>
+<div class="text-[10px] text-on-surface-variant font-label-sm">Cumulative 59.4%</div>
+</div>
+</div>
+</section>
+<!-- Black-Ball Pockets Heatmap Section (The 'Felt Breakdown') -->
+<section class="timber-card rounded-xl p-4">
+<div class="flex justify-between items-center mb-1">
+<h3 class="font-body-lg text-body-lg font-medium text-on-surface">Black-ball pockets in your wins</h3>
+<span class="font-label-sm text-label-sm text-primary uppercase">236 Recorded</span>
+</div>
+<p class="font-label-sm text-label-sm text-outline mb-3">Interactive pool table pocket distribution</p>
+<!-- Pool Table Geometry Canvas -->
+<div class="relative w-full aspect-[16/9] rounded-xl p-2 bg-[#2c1d13] border-4 border-[#4a3221] shadow-[inset_0_2px_8px_rgba(0,0,0,0.8),0_10px_24px_rgba(0,0,0,0.6)] flex flex-col justify-between overflow-hidden select-none"><div class="absolute inset-1 rounded-lg border-2 border-[#1f140c] pointer-events-none z-20"></div><div class="absolute inset-2 rounded-md bg-[#133728] shadow-[inset_0_0_22px_rgba(0,0,0,0.85),inset_0_2px_4px_rgba(0,0,0,0.6)] pointer-events-none"><div class="absolute inset-0 opacity-15 bg-[radial-gradient(#e8c181_1px,transparent_1px)] [background-size:12px_12px]"></div><div class="absolute inset-x-8 top-1/2 -translate-y-1/2 border-b border-[#1b4a37] border-dashed opacity-40"></div></div><div class="absolute right-24 bottom-9 w-6 h-6 rounded-full bg-black border border-white/20 flex items-center justify-center shadow-lg transform -rotate-12 pointer-events-none z-20"><div class="w-3 h-3 rounded-full bg-white flex items-center justify-center"><span class="text-[8px] font-bold text-black font-sans leading-none">8</span></div></div><div class="flex justify-between items-center relative z-30"><div class="relative -top-0.5 -left-0.5"><div class="absolute -inset-1 rounded-br-2xl rounded-tl-lg bg-[#0a0705] shadow-[inset_0_3px_6px_rgba(0,0,0,0.9)] border border-[#3d2719]"></div><button class="relative w-11 h-11 rounded-full bg-surface-container-lowest/95 border border-outline-variant/60 flex flex-col items-center justify-center shadow-md active:scale-95 transition-transform"><span class="font-label-sm text-[11px] font-bold text-on-surface">15.7%</span><span class="text-[8px] text-outline leading-none uppercase">TL</span></button></div><div class="relative -top-1"><div class="absolute -inset-1 rounded-b-xl bg-[#0a0705] shadow-[inset_0_3px_6px_rgba(0,0,0,0.9)] border-b border-x border-[#3d2719]"></div><button class="relative w-11 h-11 rounded-full bg-surface-container-lowest/95 border border-outline-variant/60 flex flex-col items-center justify-center shadow-md active:scale-95 transition-transform"><span class="font-label-sm text-[11px] font-bold text-on-surface">14.0%</span><span class="text-[8px] text-outline leading-none uppercase">TM</span></button></div><div class="relative -top-0.5 -right-0.5"><div class="absolute -inset-1.5 rounded-bl-2xl rounded-tr-lg bg-[#0a0705] shadow-[inset_0_3px_6px_rgba(0,0,0,0.9)] border border-[#e8c181]/40"></div><button class="relative w-12 h-12 rounded-full bg-primary-container text-on-primary-container border-2 border-primary flex flex-col items-center justify-center brass-glow active:scale-95 transition-transform"><span class="font-label-sm text-[12px] font-extrabold text-on-primary-container">22.9%</span><span class="text-[8px] text-on-primary-container font-semibold uppercase leading-none">FAV</span></button></div></div><div class="self-center flex items-center gap-1 opacity-20 pointer-events-none relative z-10"><span class="material-symbols-outlined text-[18px] text-primary" data-icon="sports_score">sports_score</span><span class="font-headline-sm text-xs tracking-widest text-primary font-bold">PULE HERITAGE</span></div><div class="flex justify-between items-center relative z-30"><div class="relative -bottom-0.5 -left-0.5"><div class="absolute -inset-1 rounded-tr-2xl rounded-bl-lg bg-[#0a0705] shadow-[inset_0_3px_6px_rgba(0,0,0,0.9)] border border-[#3d2719]"></div><button class="relative w-11 h-11 rounded-full bg-surface-container-lowest/95 border border-outline-variant/60 flex flex-col items-center justify-center shadow-md active:scale-95 transition-transform"><span class="font-label-sm text-[11px] font-bold text-on-surface">15.7%</span><span class="text-[8px] text-outline leading-none uppercase">BL</span></button></div><div class="relative -bottom-1"><div class="absolute -inset-1 rounded-t-xl bg-[#0a0705] shadow-[inset_0_3px_6px_rgba(0,0,0,0.9)] border-t border-x border-[#3d2719]"></div><button class="relative w-11 h-11 rounded-full bg-surface-container-lowest/95 border border-outline-variant/60 flex flex-col items-center justify-center shadow-md active:scale-95 transition-transform"><span class="font-label-sm text-[11px] font-bold text-on-surface">12.3%</span><span class="text-[8px] text-outline leading-none uppercase">BM</span></button></div><div class="relative -bottom-0.5 -right-0.5"><div class="absolute -inset-1 rounded-tl-2xl rounded-br-lg bg-[#0a0705] shadow-[inset_0_3px_6px_rgba(0,0,0,0.9)] border border-[#3d2719]"></div><button class="relative w-11 h-11 rounded-full bg-surface-container-lowest/95 border border-outline-variant/60 flex flex-col items-center justify-center shadow-md active:scale-95 transition-transform"><span class="font-label-sm text-[11px] font-bold text-primary">19.5%</span><span class="text-[8px] text-outline leading-none uppercase">BR</span></button></div></div></div>
+<!-- Pocket Detail Micro-Drawer (Active on Top Right Corner) -->
+<div class="mt-3 p-3 rounded-lg bg-surface-container-lowest border border-primary/30 flex items-start justify-between">
+<div class="space-y-0.5">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-body-sm text-body-sm font-semibold text-primary">Top-Right Corner (Preferred Pocket)</span>
+</div>
+<p class="font-body-sm text-[12px] text-on-surface-variant">54 black-balls potted · 8 of 9 golden breaks concluded here.</p>
+</div>
+<span class="px-2 py-0.5 rounded bg-secondary-container/50 text-secondary text-[11px] font-mono font-medium">
+            +4.3% vs Avg
+          </span>
+</div>
+</section>
+<!-- Frame Wins by Type & Break Performance Bento Section -->
+<section class="grid grid-cols-1 gap-3">
+<!-- Frame Wins Accordion / Progress Rail -->
+<div class="timber-card rounded-xl p-4 space-y-3">
+<div class="flex justify-between items-center">
+<h3 class="font-body-lg text-body-lg font-medium text-on-surface">Frame wins by type</h3>
+<span class="font-label-sm text-label-sm text-outline uppercase">238 Frames</span>
+</div>
+<!-- Normal Win -->
+<div class="space-y-1">
+<div class="flex justify-between font-label-md text-label-md">
+<span class="text-on-surface">Standard Potout</span>
+<span class="font-semibold text-primary">207 <span class="text-outline font-normal">/ 238</span></span>
+</div>
+<div class="w-full h-2 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 87%;"></div>
+</div>
+</div>
+<!-- Golden Break -->
+<div class="space-y-1">
+<div class="flex justify-between font-label-md text-label-md">
+<span class="text-on-surface flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary" data-icon="stars">stars</span>
+                Golden Break
+              </span>
+<span class="font-semibold text-secondary">9 <span class="text-outline font-normal">/ 238</span></span>
+</div>
+<div class="w-full h-2 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-secondary-container rounded-full" style="width: 3.8%;"></div>
+</div>
+</div>
+<!-- Super Foul -->
+<div class="space-y-1">
+<div class="flex justify-between font-label-md text-label-md">
+<span class="text-on-surface">Super Foul (Opponent Scratch)</span>
+<span class="font-semibold text-on-surface-variant">22 <span class="text-outline font-normal">/ 238</span></span>
+</div>
+<div class="w-full h-2 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-outline-variant rounded-full" style="width: 9.2%;"></div>
+</div>
+</div>
+</div>
+<!-- Recent Form: Last 10 Nights Streak Strip -->
+<div class="timber-card rounded-xl p-4">
+<div class="flex justify-between items-center mb-2.5">
+<div>
+<h3 class="font-body-lg text-body-lg font-medium text-on-surface">Last 10 nights form</h3>
+<p class="font-label-sm text-label-sm text-outline">Newest → oldest · Sequence tracking</p>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-label-sm text-secondary font-bold uppercase">7W - 2L - 1D</span>
+</div>
+</div>
+<!-- Form Chips Matrix -->
+<div class="grid grid-cols-5 gap-1.5">
+<!-- 1 (Most Recent) -->
+<div class="h-9 rounded-md bg-[#25392e] border border-secondary/50 flex flex-col items-center justify-center font-bold text-secondary text-sm">
+              D
+            </div>
+<!-- 2 -->
+<div class="h-9 rounded-md bg-secondary-container flex flex-col items-center justify-center font-bold text-secondary text-sm">
+              W
+            </div>
+<!-- 3 -->
+<div class="h-9 rounded-md bg-surface-container-lowest border border-outline-variant/30 flex flex-col items-center justify-center font-bold text-outline text-sm">
+              L
+            </div>
+<!-- 4 -->
+<div class="h-9 rounded-md bg-secondary-container flex flex-col items-center justify-center font-bold text-secondary text-sm">
+              W
+            </div>
+<!-- 5 -->
+<div class="h-9 rounded-md bg-surface-container-lowest border border-outline-variant/30 flex flex-col items-center justify-center font-bold text-outline text-sm">
+              L
+            </div>
+<!-- 6 -->
+<div class="h-9 rounded-md bg-secondary-container flex flex-col items-center justify-center font-bold text-secondary text-sm">
+              W
+            </div>
+<!-- 7 -->
+<div class="h-9 rounded-md bg-secondary-container flex flex-col items-center justify-center font-bold text-secondary text-sm">
+              W
+            </div>
+<!-- 8 -->
+<div class="h-9 rounded-md bg-secondary-container flex flex-col items-center justify-center font-bold text-secondary text-sm">
+              W
+            </div>
+<!-- 9 -->
+<div class="h-9 rounded-md bg-surface-container-lowest border border-outline-variant/30 flex flex-col items-center justify-center font-bold text-outline text-sm">
+              L
+            </div>
+<!-- 10 -->
+<div class="h-9 rounded-md bg-secondary-container flex flex-col items-center justify-center font-bold text-secondary text-sm">
+              W
+            </div>
+</div>
+</div>
+</section>
+<!-- My Records 2x2 Bento Tiles -->
+<section class="space-y-2 pb-2">
+<div class="flex justify-between items-center">
+<h3 class="font-headline-sm text-headline-sm font-semibold text-on-surface">My records</h3>
+<span class="font-label-sm text-label-sm text-primary uppercase tracking-wider">Hall of Fame</span>
+</div>
+<div class="grid grid-cols-2 gap-2.5">
+<!-- Tile 1 -->
+<div class="timber-card rounded-xl p-3 flex flex-col justify-between">
+<span class="font-label-sm text-label-sm text-outline uppercase leading-tight">Most frames in a night</span>
+<div class="my-2">
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary leading-none">21</span>
+</div>
+<div class="text-[11px] text-on-surface-variant font-label-sm truncate">
+              Sean · 12 Aug 2026
+            </div>
+</div>
+<!-- Tile 2 -->
+<div class="timber-card rounded-xl p-3 flex flex-col justify-between">
+<span class="font-label-sm text-label-sm text-outline uppercase leading-tight">Biggest winning margin</span>
+<div class="my-2 flex items-baseline gap-1">
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary leading-none">9</span>
+<span class="font-label-sm text-outline text-xs">frames</span>
+</div>
+<div class="text-[11px] text-on-surface-variant font-label-sm truncate">
+              Sean · 12 Aug 2026
+            </div>
+</div>
+<!-- Tile 3 -->
+<div class="timber-card rounded-xl p-3 flex flex-col justify-between">
+<span class="font-label-sm text-label-sm text-outline uppercase leading-tight">Best frame run</span>
+<div class="my-2 flex items-baseline gap-1">
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-secondary leading-none">7</span>
+<span class="font-label-sm text-outline text-xs">consecutive</span>
+</div>
+<div class="text-[11px] text-on-surface-variant font-label-sm truncate">
+              Streak ended 3 Nov
+            </div>
+</div>
+<!-- Tile 4 -->
+<div class="timber-card rounded-xl p-3 flex flex-col justify-between">
+<span class="font-label-sm text-label-sm text-outline uppercase leading-tight">Comeback victories</span>
+<div class="my-2 flex items-baseline gap-1">
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary leading-none">6</span>
+<span class="font-label-sm text-outline text-xs">from behind</span>
+</div>
+<div class="text-[11px] text-on-surface-variant font-label-sm truncate">
+              10 nights trailing
+            </div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar (from Shared Components JSON) -->
+<!-- Active State Logic: Screen is "Stats" so "Stats" label item gets style_active_navigation -->
+<nav class="bg-surface-container-low dark:bg-surface-container-low docked full-width bottom-0 fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-gutter-mobile py-space-xs pb-safe shadow-[0_-4px_16px_rgba(0,0,0,0.5)]">
+<!-- Destination 1: Home -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-3 py-1.5 hover:text-secondary-fixed-dim transition-colors duration-150 active:scale-95 transition-transform" href="#home">
+<span class="material-symbols-outlined text-[20px]" data-icon="home">home</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Home</span>
+</a>
+<!-- Destination 2: Play -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-3 py-1.5 hover:text-secondary-fixed-dim transition-colors duration-150 active:scale-95 transition-transform" href="#play">
+<span class="material-symbols-outlined text-[20px]" data-icon="play_arrow">play_arrow</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Play</span>
+</a>
+<!-- Destination 3: History -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-3 py-1.5 hover:text-secondary-fixed-dim transition-colors duration-150 active:scale-95 transition-transform" href="#history">
+<span class="material-symbols-outlined text-[20px]" data-icon="receipt_long">receipt_long</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">History</span>
+</a>
+<!-- Destination 4: Stats (ACTIVE) -->
+<a class="flex flex-col items-center justify-center bg-secondary-container text-secondary px-3 py-1.5 rounded-full active:scale-95 transition-transform" href="#stats">
+<span class="material-symbols-outlined text-[20px]" data-icon="trending_up" data-weight="fill" style="font-variation-settings: 'FILL' 1;">trending_up</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Stats</span>
+</a>
+<!-- Destination 5: Account -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-3 py-1.5 hover:text-secondary-fixed-dim transition-colors duration-150 active:scale-95 transition-transform" href="#account">
+<span class="material-symbols-outlined text-[20px]" data-icon="person">person</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Account</span>
+</a>
+</nav>
+</div>
+
+
+</body></html>

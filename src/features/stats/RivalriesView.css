@@ -1,0 +1,6 @@
+.personal-rivalry .rivalry-opponent { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:10px; font-size:13px; color:#F1EBDD; }
+.personal-rivalry .rivalry-opponent select { width:100%; min-width:0; min-height:44px; padding:10px 8px; border:1px solid #536357; border-radius:8px; background:#151C17; color:#F1EBDD; font:inherit; }
+.personal-rivalry .rivalry-opponent select:focus-visible { outline:2px solid #C2A06B; outline-offset:2px; }
+
+.personal-rivalry dl.rivalry-opponent { margin:0; }
+.personal-rivalry .rivalry-opponent-name { margin:0; min-width:0; padding:10px 8px; border-radius:8px; background:#151C17; color:#F1EBDD; overflow-wrap:anywhere; line-height:1.5; }

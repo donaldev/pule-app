@@ -1,0 +1,26 @@
+.my-performance:has(.personal-performance-history) { gap:16px; }
+.my-performance .personal-summary-header h2 { font-size:22px; }
+.stats-page .my-performance .personal-summary .personal-record { margin:4px 0 10px; }
+.my-performance .personal-performance-history { min-width:0; }
+.personal-history-loading { height:220px; color:#A7A99E; font-size:13px; }
+.my-performance .frame-performance .personal-metrics { margin-bottom:14px; }
+.my-performance .frame-performance .detail-subtitle { margin:12px 0 10px; font-size:14px; color:#F1EBDD; }
+.my-performance .frame-performance .detail-metrics { gap:14px 10px; }
+.my-performance .break-performance .stat-bar > div:first-child { font-size:12px; }
+.my-performance .break-performance .stat-bar strong { font-size:14px; }
+.my-performance .win-type-performance .rate-bars { margin:0; gap:12px; }
+.my-performance .pocket-performance .pocket-detail { min-height:2.8em; color:#F1EBDD; }
+.my-performance .pocket-performance .stats-pocket[aria-pressed=true] { outline:0; background:#4B3325; box-shadow:0 0 0 2px #C2A06B; }
+.my-performance .personal-existing-progress > summary { min-height:44px; cursor:pointer; padding:8px 0; color:#C2A06B; font-size:14px; }
+.my-performance .personal-existing-progress ol { padding-left:18px; font-size:12px; overflow-wrap:anywhere; }
+.my-performance .personal-existing-progress summary:focus-visible { outline:2px solid #C2A06B; outline-offset:2px; }
+
+
+.frame-insights-section [role=status] { min-height:200px; }
+.frame-insights-section #frame-insights-content:not([hidden]) { margin-top:12px; }
+.my-performance .additional-trends { padding-block:8px; }
+.my-performance .disclosure-heading h2 { margin:0; font-size:14px; }
+.my-performance .additional-trends #additional-trends-content:not([hidden]) { margin-top:8px; }
+.my-performance .frame-performance .frame-results-subtitle { margin-top:8px; color:#A7A99E; font-size:12px; font-weight:600; }
+.my-performance .frame-performance .detail-subtitle:not(.frame-results-subtitle) { padding-top:12px; border-top:1px solid #536357; color:#A7A99E; font-size:12px; font-weight:600; }
+.my-performance .additional-trends .detail-subtitle { font-size:13px; font-weight:600; color:#A7A99E; }

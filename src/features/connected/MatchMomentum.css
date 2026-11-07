@@ -1,0 +1,20 @@
+.match-momentum { display:grid; gap:10px; min-width:0; color:var(--text); }
+.momentum-key { display:flex; flex-wrap:wrap; gap:6px 14px; margin:0; font-size:12px; overflow-wrap:anywhere; }
+.momentum-key span:first-child { color:var(--brass); }
+.momentum-plot { height:220px; min-width:0; touch-action:pan-y; }
+.momentum-inspection { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; align-items:end; gap:8px; }
+.momentum-inspection label { min-width:0; display:grid; gap:4px; font-size:12px; }
+.momentum-inspection select,.momentum-inspection button { min-height:44px; min-width:44px; color:var(--text); background:var(--felt); border:1px solid var(--line); border-radius:8px; padding:8px; }
+.momentum-inspection select { width:100%; min-width:0; }
+.momentum-inspection button:disabled { opacity:.45; }
+.match-momentum :is(button,select,summary):focus-visible,.momentum-plot:focus-visible { outline:2px solid var(--brass); outline-offset:3px; }
+.momentum-detail { padding:12px; background:var(--felt); border-radius:8px; font-size:13px; overflow-wrap:anywhere; }
+.momentum-detail p { margin:6px 0 0; }
+.momentum-summary { display:grid; gap:6px; margin:0; font-size:12px; }
+.momentum-summary>div { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 12px; }
+.momentum-summary dt { color:var(--muted); }
+.momentum-summary dd { margin:0; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.momentum-text { font-size:12px; overflow-wrap:anywhere; }
+.momentum-text summary { display:flex; align-items:center; min-height:44px; cursor:pointer; color:var(--brass); }
+.momentum-text ol { padding-left:18px; }
+.momentum-text li { margin-bottom:8px; }

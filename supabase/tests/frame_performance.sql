@@ -1,0 +1,45 @@
+insert into private.player_account_links(player_id,user_id,verified_by,verification_reference)
+values('30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','synthetic frame analytics test');
+set role authenticated;
+set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';
+select test.ok(jsonb_array_length(app.get_my_frame_summary()->'nights')=2,'caller gets own completed nights');
+select test.ok(not exists(select 1 from jsonb_array_elements(app.get_my_frame_summary()->'nights') n where jsonb_array_length(n->'frames')<>0),'score-only and disputed details not fabricated');
+select test.ok(app.get_my_frame_summary('30000000-0000-0000-0000-000000000001')->'nights'='[]'::jsonb,'self is not an opponent');
+select test.ok(app.get_my_frame_summary('30000000-0000-0000-0000-000000000003')->'nights'='[]'::jsonb,'unrelated opponent reveals no private match');
+do $$declare a jsonb; sid uuid; f uuid; p uuid:='30000000-0000-0000-0000-000000000001'; q uuid:='30000000-0000-0000-0000-000000000002'; n jsonb; begin
+ a:=app.start_session(gen_random_uuid(),'10000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001',array[p,q],p);sid:=(a#>>'{session,id}')::uuid;
+ perform test.ok(jsonb_array_length(app.get_my_frame_summary()->'nights')=2,'unfinished frames excluded');
+ a:=app.start_frame(gen_random_uuid(),sid,1,array[p,q],p);f:=(a#>>'{frames,0,id}')::uuid;
+ a:=app.complete_frame(gen_random_uuid(),sid,2,f,p,1,0,true,'regular','TL');perform app.finalize_session(gen_random_uuid(),sid,3);
+ select value into n from jsonb_array_elements(app.get_my_frame_summary()->'nights') where value->>'id'=sid::text;
+ perform test.ok(n#>>'{frames,0,winner}'=p::text and n#>>'{frames,0,breaker}'=p::text,'winner and breaker observations retained');
+ perform test.ok((n#>>'{frames,0,break_pot}')::boolean and n#>>'{frames,0,pocket}'='TL','break and pocket observations retained');
+ perform test.ok(n#>>'{frames,0,players,0,id}'=p::text and (n#>>'{frames,0,players,0,fouls}')::int=1,'fouls are player-scoped');
+ perform test.ok(n#>>'{frames,0,duration_quality}'='server_measured' and n#>>'{frames,0,elapsed_ms}' is not null,'duration retains quality');
+ perform test.ok(jsonb_array_length(app.get_my_frame_summary(q)->'nights')=3,'exact pair includes imported and native nights once');
+ perform app.remove_match(gen_random_uuid(),sid,4,'delete');
+ perform test.ok(not exists(select 1 from jsonb_array_elements(app.get_my_frame_summary()->'nights') x where x->>'id'=sid::text),'deleted night omitted from frame read');
+ a:=app.start_session(gen_random_uuid(),'10000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001',array[p,q],p);sid:=(a#>>'{session,id}')::uuid;
+ perform app.remove_match(gen_random_uuid(),sid,1,'abandon');
+ perform test.ok(jsonb_array_length(app.get_my_frame_summary()->'nights')=2,'abandoned night omitted');
+end $$;
+reset role;
+insert into app.group_players(group_id,player_id,display_name) values('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000003','Synthetic third');
+set role authenticated;
+do $$declare a jsonb; sid uuid; f uuid; p uuid:='30000000-0000-0000-0000-000000000001';q uuid:='30000000-0000-0000-0000-000000000002'; begin
+ a:=app.start_session(gen_random_uuid(),'10000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001',array[p,q,'30000000-0000-0000-0000-000000000003'::uuid],p);sid:=(a#>>'{session,id}')::uuid;
+ a:=app.start_frame(gen_random_uuid(),sid,1,array[p,q],p);f:=(a#>>'{frames,0,id}')::uuid;
+ a:=app.complete_frame(gen_random_uuid(),sid,2,f,p,0,0,false,'regular');perform app.finalize_session(gen_random_uuid(),sid,3);
+ perform test.ok(jsonb_array_length(app.get_my_frame_summary()->'nights')=3,'multiplayer eligible in personal scope');
+ perform test.ok(jsonb_array_length(app.get_my_frame_summary(q)->'nights')=2,'multiplayer excluded from exact rivalry scope');
+end $$;
+set request.jwt.claim.sub='20000000-0000-0000-0000-000000000003';
+select test.ok(app.get_my_frame_summary()->'player_id'='null'::jsonb and app.get_my_frame_summary()->'nights'='[]'::jsonb,'unlinked user cannot select another sporting identity');
+set role anon;
+select test.denied($q$select app.get_my_frame_summary()$q$,'42501','anonymous frame read denied');
+reset role;
+update app.groups set status='archived' where id='10000000-0000-0000-0000-000000000001';
+set role authenticated;
+set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';
+select test.ok(app.get_my_frame_summary()->'nights'='[]'::jsonb,'inactive access hides frame history');
+reset role;

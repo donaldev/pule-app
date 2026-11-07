@@ -1,0 +1,454 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>pule. — Rivalry &amp; Live Match Command Center</title>
+<!-- Typography & Icons -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&amp;family=Hanken+Grotesk:ital,wght@0,300..900;1,300..900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-background": "#e2e3e0",
+            "primary": "#e8c181",
+            "surface-tint": "#e8c181",
+            "surface-container-low": "#1a1c1b",
+            "on-error": "#690005",
+            "secondary-fixed-dim": "#9ed2b8",
+            "inverse-on-surface": "#2f3130",
+            "surface": "#121413",
+            "surface-dim": "#121413",
+            "outline-variant": "#4e463a",
+            "on-tertiary": "#372f29",
+            "surface-bright": "#383a38",
+            "surface-container-lowest": "#0d0f0e",
+            "on-primary-fixed": "#271900",
+            "primary-fixed": "#ffdeab",
+            "on-primary-container": "#523904",
+            "tertiary-fixed": "#eee0d6",
+            "secondary": "#9ed2b8",
+            "surface-container": "#1e201f",
+            "primary-fixed-dim": "#e8c181",
+            "on-tertiary-container": "#453c35",
+            "background": "#121413",
+            "on-surface-variant": "#d1c5b5",
+            "tertiary-container": "#b3a69e",
+            "inverse-primary": "#775924",
+            "secondary-fixed": "#b9eed4",
+            "surface-container-highest": "#333534",
+            "tertiary": "#d2c4bb",
+            "on-tertiary-fixed-variant": "#4e453e",
+            "on-primary-fixed-variant": "#5d420e",
+            "on-tertiary-fixed": "#211a15",
+            "on-error-container": "#ffdad6",
+            "inverse-surface": "#e2e3e0",
+            "on-secondary": "#003827",
+            "surface-variant": "#333534",
+            "on-surface": "#e2e3e0",
+            "tertiary-fixed-dim": "#d2c4bb",
+            "on-secondary-container": "#90c3ab",
+            "outline": "#9a8f81",
+            "on-secondary-fixed": "#002115",
+            "surface-container-high": "#282a29",
+            "primary-container": "#c8a366",
+            "on-secondary-fixed-variant": "#1e4f3c",
+            "on-primary": "#422c00",
+            "error-container": "#93000a",
+            "secondary-container": "#20523e",
+            "error": "#ffb4ab"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "gutter": "1.5rem",
+            "margin": "3rem",
+            "space-xs": "0.25rem",
+            "space-lg": "1.5rem",
+            "space-xl": "2.5rem",
+            "space-md": "1rem",
+            "gutter-mobile": "0.75rem",
+            "space-sm": "0.5rem",
+            "margin-mobile": "1.25rem"
+          },
+          "fontFamily": {
+            "headline-sm": ["EB Garamond"],
+            "headline-md": ["EB Garamond"],
+            "label-sm": ["Hanken Grotesk"],
+            "body-md": ["Hanken Grotesk"],
+            "body-lg": ["Hanken Grotesk"],
+            "label-md": ["Hanken Grotesk"],
+            "display-lg": ["EB Garamond"],
+            "display-lg-mobile": ["EB Garamond"],
+            "headline-lg": ["EB Garamond"],
+            "body-sm": ["Hanken Grotesk"],
+            "headline-lg-mobile": ["EB Garamond"]
+          },
+          "fontSize": {
+            "headline-sm": ["20px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "600" }],
+            "headline-md": ["26px", { "lineHeight": "34px", "letterSpacing": "-0.01em", "fontWeight": "500" }],
+            "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.12em", "fontWeight": "700" }],
+            "body-md": ["15px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "400" }],
+            "body-lg": ["17px", { "lineHeight": "26px", "letterSpacing": "-0.005em", "fontWeight": "400" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.08em", "fontWeight": "600" }],
+            "display-lg": ["56px", { "lineHeight": "64px", "letterSpacing": "-0.02em", "fontWeight": "400" }],
+            "display-lg-mobile": ["38px", { "lineHeight": "44px", "letterSpacing": "-0.01em", "fontWeight": "400" }],
+            "headline-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.015em", "fontWeight": "500" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "letterSpacing": "0.005em", "fontWeight": "400" }],
+            "headline-lg-mobile": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "500" }]
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .material-symbols-outlined[data-weight="fill"] {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    /* Hide scrollbars for crisp native feel */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    /* Subtle brass lighting sheen */
+    .brass-glow {
+      box-shadow: 0 4px 20px rgba(200, 163, 102, 0.2);
+    }
+    .felt-recess {
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body-md antialiased min-h-screen flex justify-center selection:bg-primary-container selection:text-on-primary-container">
+<!-- Mobile 390px Shell Container -->
+<div class="w-full max-w-[420px] min-h-screen flex flex-col bg-background pb-28 relative shadow-2xl">
+<!-- TopAppBar (from Shared Components) -->
+<header class="bg-surface dark:bg-surface border-b border-outline-variant/30 docked full-width top-0 sticky z-40 flex justify-between items-center w-full px-margin-mobile py-space-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary hover:text-primary transition-colors duration-150 cursor-pointer text-xl" data-icon="sports_score">sports_score</span>
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold tracking-tight text-on-surface dark:text-on-surface font-headline-sm">pule.</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-container/60 border border-secondary/20">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-secondary tracking-widest uppercase">LIVE ARENA</span>
+</div>
+<button aria-label="Notifications" class="text-on-surface-variant hover:text-primary transition-colors duration-150 active:opacity-80 p-1">
+<span class="material-symbols-outlined text-xl" data-icon="notifications">notifications</span>
+</button>
+</div>
+</header>
+<!-- Subheader / Profile & Context -->
+<div class="px-margin-mobile pt-2.5 pb-1 flex items-center gap-2 border-b border-outline-variant/20"><a href="#my-stats" class="px-3 py-1 rounded-full text-on-surface-variant font-label-md text-label-md hover:text-primary transition-colors">My stats</a><a href="#rivalries" class="px-3 py-1 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md font-bold brass-glow">Rivalries</a><a href="#leaderboards" class="px-3 py-1 rounded-full text-on-surface-variant font-label-md text-label-md hover:text-primary transition-colors">Leaderboards</a></div><div class="px-margin-mobile pt-3 pb-1 flex justify-between items-baseline"><div class="">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-primary font-bold">RIVALRIES · H2H ARCHIVE</span>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-headline-md text-on-surface leading-tight">Rivalry: Donal vs Sean</h1>
+</div>
+<a class="font-label-md text-label-md text-primary flex items-center gap-0.5 hover:text-primary-fixed transition-colors" href="#all-rivals">
+<span class="">All Rivals</span>
+<span class="material-symbols-outlined text-sm" data-icon="swap_horiz">swap_horiz</span>
+</a></div>
+<!-- Opponent Selector Carousel -->
+<section class="pt-2 pb-3 px-margin-mobile overflow-x-auto no-scrollbar flex items-center gap-2">
+<!-- Active: Sean -->
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-container text-on-primary-container brass-glow font-label-md text-label-md transition-transform active:scale-95 whitespace-nowrap">
+<span class="w-2 h-2 rounded-full bg-surface"></span>
+<span class="font-bold">vs Sean (Rival)</span>
+<span class="bg-surface/20 text-on-primary-container px-1.5 py-0.2 rounded font-label-sm text-label-sm">16–16</span>
+</button>
+<!-- Idle Rivals -->
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-low border border-outline-variant/50 text-on-surface-variant font-label-md text-label-md hover:border-primary/50 transition-colors whitespace-nowrap">
+<span class="">Liam C.</span>
+<span class="text-outline font-label-sm text-label-sm">14–9</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-low border border-outline-variant/50 text-on-surface-variant font-label-md text-label-md hover:border-primary/50 transition-colors whitespace-nowrap">
+<span class="">Dave M.</span>
+<span class="text-outline font-label-sm text-label-sm">8–4</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-low border border-outline-variant/50 text-on-surface-variant font-label-md text-label-md hover:border-primary/50 transition-colors whitespace-nowrap">
+<span class="">Paddy T.</span>
+<span class="text-outline font-label-sm text-label-sm">21–12</span>
+</button>
+</section>
+<!-- Main Command Content -->
+<main class="px-margin-mobile flex flex-col gap-4">
+<!-- SECTION 1: LIVE MATCH COMMAND HERO (Green Baize Felt) -->
+<section class="rounded-xl bg-[#143426] border border-[#274235] p-4 text-on-surface relative overflow-hidden shadow-lg">
+<!-- Ambient felt texture bloom -->
+<div class="absolute -right-8 -top-8 w-36 h-36 bg-[#274235]/60 rounded-full blur-2xl pointer-events-none"></div>
+<!-- Venue & Race Status Header -->
+<div class="flex items-center justify-between border-b border-[#274235]/80 pb-2.5 mb-3"><div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary font-bold">Active Match Night · Sneaky Pete's (T4)</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider bg-[#0f241a] px-2 py-0.5 rounded border border-[#274235]">Race to 20</span>
+<div class="flex items-center gap-1 text-primary font-label-md text-label-md">
+<span class="material-symbols-outlined text-xs" data-icon="timer">timer</span>
+<span class="">01:14:22</span>
+</div>
+</div></div>
+<!-- Head to Head Big Score & Shooting Turn Indicator -->
+<div class="grid grid-cols-7 items-center my-2">
+<!-- Donal (User) -->
+<div class="col-span-3 text-center flex flex-col items-center">
+<div class="flex items-center gap-1 text-primary">
+<span class="font-label-md text-label-md uppercase tracking-wider font-bold">Donal</span>
+<span class="material-symbols-outlined text-xs text-primary" data-icon="sports" data-weight="fill">sports</span>
+</div>
+<span class="font-headline-lg text-5xl font-extrabold tracking-tight text-white my-0.5" id="score-donal">16</span>
+<span class="font-label-sm text-label-sm text-secondary bg-[#1a4a35] px-2 py-0.5 rounded-full border border-secondary/30">Shooting (Break)</span>
+</div>
+<!-- Divider & Frame Status -->
+<div class="col-span-1 flex flex-col items-center justify-center text-center">
+<span class="text-primary/70 font-headline-sm text-2xl font-light">—</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase mt-1">F33</span>
+</div>
+<!-- Sean (Rival) -->
+<div class="col-span-3 text-center flex flex-col items-center opacity-85">
+<div class="flex items-center gap-1 text-on-surface-variant">
+<span class="font-label-md text-label-md uppercase tracking-wider font-medium">Sean</span>
+</div>
+<span class="font-headline-lg text-5xl font-extrabold tracking-tight text-[#d1c5b5] my-0.5" id="score-sean">16</span>
+<span class="font-label-sm text-label-sm text-outline-variant bg-[#11241b] px-2 py-0.5 rounded-full">Awaiting Turn</span>
+</div>
+</div>
+<!-- Frame Momentum Bar -->
+<div class="mt-3 mb-4">
+<div class="flex justify-between items-center text-xs font-label-sm text-label-sm text-on-surface-variant mb-1">
+<span class="text-secondary font-bold">MATCH TIED · HILL-HILL PROXIMITY</span>
+<span class="text-primary font-bold">Need 4 to Clinch</span>
+</div>
+<div class="w-full h-2 rounded-full bg-[#0d1e16] flex overflow-hidden border border-[#274235]">
+<div class="h-full bg-primary" style="width: 50%;"></div>
+<div class="h-full bg-[#3c332a]" style="width: 50%;"></div>
+</div>
+</div>
+<!-- Fast Score Scoring Action Zone (Thumb-First Controls) -->
+<div class="flex flex-col gap-2 pt-1 border-t border-[#274235]/80">
+<div class="grid grid-cols-3 gap-2">
+<button class="col-span-2 py-3 px-3 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-headline-sm font-bold text-base flex items-center justify-center gap-2 brass-glow transition-all active:scale-[0.98]" id="btn-score-donal">
+<span class="material-symbols-outlined text-lg" data-icon="add_circle" data-weight="fill">add_circle</span>
+<span class="">Score Frame (Donal)</span>
+</button>
+<button class="col-span-1 py-3 px-2 rounded-lg bg-[#182820] hover:bg-[#1f342a] border border-[#274235] text-on-surface font-label-md text-label-md font-semibold flex items-center justify-center gap-1 transition-all active:scale-[0.98]" id="btn-score-sean">
+<span class="">+ Frame Sean</span>
+</button>
+</div>
+<!-- Micro Quick Tags / In-game State Loggers -->
+<div class="flex items-center justify-between gap-1.5 mt-1">
+<button class="flex-1 py-1.5 px-2 rounded bg-[#10241b] border border-[#274235] text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider hover:border-primary/50 text-center active:bg-secondary-container">
+              Ball-In-Hand
+            </button>
+<button class="flex-1 py-1.5 px-2 rounded bg-[#10241b] border border-[#274235] text-error font-label-sm text-label-sm uppercase tracking-wider hover:border-error/50 text-center active:bg-error-container">
+              Foul Logged
+            </button>
+<button class="py-1.5 px-3 rounded bg-[#10241b] border border-[#274235] text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider hover:border-outline text-center flex items-center gap-1 active:scale-95" title="Undo Last Entry">
+<span class="material-symbols-outlined text-xs" data-icon="undo">undo</span>
+<span class="">Undo</span>
+</button>
+</div>
+</div>
+</section>
+<!-- SECTION 2: LIFETIME RIVALRY RECORD (Tier 1 Walnut Panel) -->
+<section class="rounded-xl bg-surface-container-low border border-outline-variant/40 p-4">
+<div class="flex justify-between items-center mb-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-base" data-icon="swords">swords</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Head to Head Record</h2>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container-high text-primary px-2 py-0.5 rounded border border-outline-variant/30">
+            37 Encounters
+          </span>
+</div>
+<!-- Score Ledger Callout -->
+<div class="bg-surface-container-lowest rounded-lg p-3 felt-recess border border-outline-variant/30">
+<div class="flex items-center justify-around text-center">
+<div>
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold">Donal</span>
+<div class="font-headline-lg text-4xl text-on-surface font-bold">19</div>
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Night Wins</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="font-label-sm text-label-sm text-outline-variant uppercase">5 Draws</span>
+<div class="h-6 w-[1px] bg-outline-variant/50 my-1"></div>
+<span class="font-label-sm text-label-sm text-secondary font-bold">59.4% Win Rate</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-outline uppercase font-medium">Sean</span>
+<div class="font-headline-lg text-4xl text-on-surface-variant font-bold">13</div>
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Night Wins</span>
+</div>
+</div>
+<!-- Total Frames Split Bar -->
+<div class="mt-3 pt-3 border-t border-outline-variant/20">
+<div class="flex justify-between text-xs font-label-md text-label-md mb-1">
+<span class="text-on-surface">407 frames won (53.7%)</span>
+<span class="text-on-surface-variant">351 frames lost</span>
+</div>
+<div class="w-full h-2 rounded bg-surface-container flex overflow-hidden">
+<div class="bg-primary-container h-full" style="width: 53.7%;"></div>
+<div class="bg-surface-variant h-full" style="width: 46.3%;"></div>
+</div>
+</div>
+</div>
+<!-- Clutch Stat Badges Grid -->
+<div class="grid grid-cols-2 gap-2 mt-3">
+<div class="bg-surface-container rounded-lg p-2.5 border border-outline-variant/30">
+<span class="font-label-sm text-label-sm text-primary uppercase block">Hill-Hill Deciders</span>
+<div class="font-headline-sm text-xl text-on-surface font-bold mt-0.5">68.8%</div>
+<span class="font-body-sm text-body-sm text-outline-variant">11 of 16 final racks clinched</span>
+</div>
+<div class="bg-surface-container rounded-lg p-2.5 border border-outline-variant/30">
+<span class="font-label-sm text-label-sm text-secondary uppercase block">Steal Efficiency</span>
+<div class="font-headline-sm text-xl text-secondary font-bold mt-0.5">51.9%</div>
+<span class="font-body-sm text-body-sm text-outline-variant">108 broken &amp; stolen frames</span>
+</div>
+</div>
+</section>
+<!-- SECTION 3: PARLOR MOMENTUM & TACTICAL NOTE -->
+<section class="rounded-xl bg-[#26201b] border border-outline-variant/40 p-3.5 flex items-start gap-3">
+<div class="p-2 rounded bg-[#3c332a]/60 text-primary shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-lg" data-icon="tips_and_updates">tips_and_updates</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-primary font-bold uppercase tracking-wider block">Tactical Note</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 leading-snug">
+            Donal has converted <strong class="text-primary font-semibold">82% of dry breaks</strong> into multi-frame winning runs over Sean across the last 12 frames at Sneaky Pete's.
+          </p>
+</div>
+</section>
+<!-- SECTION 4: RECENT MATCH NIGHT ENCOUNTERS (Last 10 Nights) -->
+<section class="rounded-xl bg-surface-container-low border border-outline-variant/40 p-4">
+<div class="flex justify-between items-center mb-3">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Recent Encounters</h2>
+<span class="font-body-sm text-body-sm text-outline">Last 10 match nights head-to-head</span>
+</div>
+<!-- Outcome Pills Sequence -->
+<div class="flex items-center gap-1">
+<span class="w-5 h-5 rounded flex items-center justify-center font-label-sm text-label-sm font-bold bg-[#4e463a] text-white">D</span>
+<span class="w-5 h-5 rounded flex items-center justify-center font-label-sm text-label-sm font-bold bg-[#1b4d3a] text-secondary">W</span>
+<span class="w-5 h-5 rounded flex items-center justify-center font-label-sm text-label-sm font-bold bg-[#5a201c] text-error">L</span>
+<span class="w-5 h-5 rounded flex items-center justify-center font-label-sm text-label-sm font-bold bg-[#1b4d3a] text-secondary">W</span>
+<span class="w-5 h-5 rounded flex items-center justify-center font-label-sm text-label-sm font-bold bg-[#5a201c] text-error">L</span>
+</div>
+</div>
+<!-- Ledger Entries -->
+<div class="space-y-2.5">
+<!-- Entry 1: Current/Most Recent Draw -->
+<div class="p-3 rounded-lg bg-surface-container border border-outline-variant/30 flex items-center justify-between hover:border-primary/40 transition-colors">
+<div class="flex items-center gap-3">
+<span class="w-7 h-7 rounded bg-[#333534] text-on-surface flex items-center justify-center font-headline-sm text-sm font-bold">D</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-base text-on-surface font-bold">16 – 16</span>
+<span class="font-label-sm text-label-sm uppercase bg-surface-container-highest text-on-surface-variant px-1.5 py-0.2 rounded">Draw</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline block">3 Nov 2026 · Most recent full set</span>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-md text-label-md text-secondary block font-bold">High Run: 4</span>
+<span class="font-label-sm text-label-sm text-outline">32 Frames</span>
+</div>
+</div>
+<!-- Entry 2: Decisive Win -->
+<div class="p-3 rounded-lg bg-surface-container border border-outline-variant/30 flex items-center justify-between hover:border-secondary/40 transition-colors">
+<div class="flex items-center gap-3">
+<span class="w-7 h-7 rounded bg-[#1b4d3a] text-secondary flex items-center justify-center font-headline-sm text-sm font-bold">W</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-base text-on-surface font-bold">12 – 5</span>
+<span class="font-label-sm text-label-sm uppercase bg-secondary-container text-secondary px-1.5 py-0.2 rounded">+7 Decisive</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline block">28 Oct 2026 · Sneaky Pete's</span>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-md text-label-md text-primary block font-bold">Golden Break (1)</span>
+<span class="font-label-sm text-label-sm text-outline">17 Frames</span>
+</div>
+</div>
+<!-- Entry 3: Tight Loss -->
+<div class="p-3 rounded-lg bg-surface-container border border-outline-variant/30 flex items-center justify-between hover:border-error/40 transition-colors">
+<div class="flex items-center gap-3">
+<span class="w-7 h-7 rounded bg-[#45201c] text-error flex items-center justify-center font-headline-sm text-sm font-bold">L</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-base text-on-surface font-bold">10 – 11</span>
+<span class="font-label-sm text-label-sm uppercase bg-error-container/60 text-error px-1.5 py-0.2 rounded">Hill-Hill</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline block">25 Oct 2026 · The Slate Room</span>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-md text-label-md text-outline-variant block">Sean Won F21</span>
+<span class="font-label-sm text-label-sm text-outline">21 Frames</span>
+</div>
+</div>
+</div>
+<button class="w-full mt-3 py-2 text-center border border-outline-variant/40 rounded-lg text-primary hover:text-primary-fixed hover:border-primary/50 transition-colors font-label-md text-label-md flex items-center justify-center gap-1">
+<span class="">View Match History (37 Sets)</span>
+<span class="material-symbols-outlined text-xs" data-icon="chevron_right">chevron_right</span>
+</button>
+</section>
+</main>
+<!-- BottomNavBar (from Shared Components JSON - Active state dynamically set to "Play" as this is the Live Command Center) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-gutter-mobile py-space-xs pb-safe bg-surface-container-low dark:bg-surface-container-low docked full-width bottom-0"><a class="flex flex-col items-center justify-center text-on-surface-variant px-3 py-1.5 hover:text-secondary-fixed-dim transition-colors duration-150 active:scale-95" href="#home"><span class="material-symbols-outlined text-xl" data-icon="home">home</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Home</span></a><a class="flex flex-col items-center justify-center text-on-surface-variant px-3 py-1.5 hover:text-secondary-fixed-dim transition-colors duration-150 active:scale-95" href="#play"><span class="material-symbols-outlined text-xl" data-icon="play_arrow">play_arrow</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Play</span></a><a class="flex flex-col items-center justify-center text-on-surface-variant px-3 py-1.5 hover:text-secondary-fixed-dim transition-colors duration-150 active:scale-95" href="#history"><span class="material-symbols-outlined text-xl" data-icon="history">history</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">History</span></a><a class="flex flex-col items-center justify-center bg-secondary-container text-secondary px-3 py-1.5 rounded-full hover:text-secondary-fixed-dim transition-colors duration-150 active:scale-95 shadow-sm" href="#stats"><span class="material-symbols-outlined text-xl" data-icon="trending_up" data-weight="fill">trending_up</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Stats</span></a><a class="flex flex-col items-center justify-center text-on-surface-variant px-3 py-1.5 hover:text-secondary-fixed-dim transition-colors duration-150 active:scale-95" href="#account"><span class="material-symbols-outlined text-xl" data-icon="person">person</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Account</span></a></nav>
+</div>
+<!-- Interactive Score Increment Script for Mobile Pool Hall Feel -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      let scoreDonal = 16;
+      let scoreSean = 16;
+
+      const donalDisplay = document.getElementById('score-donal');
+      const seanDisplay = document.getElementById('score-sean');
+      const btnScoreDonal = document.getElementById('btn-score-donal');
+      const btnScoreSean = document.getElementById('btn-score-sean');
+
+      if (btnScoreDonal && donalDisplay) {
+        btnScoreDonal.addEventListener('click', () => {
+          scoreDonal++;
+          donalDisplay.textContent = scoreDonal;
+          donalDisplay.classList.add('scale-110', 'text-primary');
+          setTimeout(() => {
+            donalDisplay.classList.remove('scale-110', 'text-primary');
+          }, 200);
+        });
+      }
+
+      if (btnScoreSean && seanDisplay) {
+        btnScoreSean.addEventListener('click', () => {
+          scoreSean++;
+          seanDisplay.textContent = scoreSean;
+          seanDisplay.classList.add('scale-110');
+          setTimeout(() => {
+            seanDisplay.classList.remove('scale-110');
+          }, 200);
+        });
+      }
+    });
+  </script>
+
+
+</body></html>

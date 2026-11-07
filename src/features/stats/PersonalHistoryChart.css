@@ -1,0 +1,20 @@
+.personal-history { min-width:0; color:#F1EBDD; }
+.personal-history-plot { height:220px; min-width:0; touch-action:pan-y; }
+.history-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; font-size:13px; }
+.history-heading strong { color:#C2A06B; font-size:26px; font-variant-numeric:tabular-nums; }
+.history-ranges { display:inline-grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:2px; padding:3px; background:#151C17; border-radius:10px; margin-top:8px; }
+.my-performance .personal-history button { min-width:44px; min-height:44px; padding:8px 12px; border:1px solid #536357; border-radius:8px; background:#151C17; color:#F1EBDD; }
+.my-performance .history-ranges button { border:0; min-width:72px; background:transparent; }
+.my-performance .history-ranges button[aria-pressed=true] { outline:0; background:#4B3325; box-shadow:inset 0 0 0 1px #C2A06B; }
+.personal-history button:disabled { opacity:.5; }
+.history-inspection { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; gap:6px; align-items:end; margin-top:8px; }
+.history-inspection label,.history-detail label { display:grid; gap:4px; min-width:0; font-size:12px; color:#A7A99E; }
+.personal-history select { width:100%; min-width:0; min-height:44px; padding:8px; border:1px solid #536357; border-radius:8px; background:#151C17; color:#F1EBDD; font:inherit; }
+.history-detail { margin-top:6px; padding:10px; background:#151C17; border-radius:10px; overflow-wrap:anywhere; }
+.history-detail p,.history-detail label { margin-top:4px; font-size:13px; line-height:1.4; }
+.history-rate { display:flex; flex-wrap:wrap; gap:4px 12px; justify-content:space-between; }
+.history-rate strong { color:#C2A06B; font-variant-numeric:tabular-nums; }
+.history-text summary { min-height:44px; padding:12px 0; cursor:pointer; color:#C2A06B; font-size:13px; }
+.history-text ol { list-style:decimal; padding-left:18px; font-size:12px; overflow-wrap:anywhere; }
+.history-text ul { padding-left:12px; margin-top:4px; }
+.my-performance .personal-history :focus-visible { outline:2px solid #C2A06B; outline-offset:2px; }
