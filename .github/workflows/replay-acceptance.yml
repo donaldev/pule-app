@@ -49,17 +49,18 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           python - <<'PY'
-          import os, sys
+          import json, os, sys
           sys.path.insert(0, 'replay-worker')
           from replay_worker import SupabaseAPI
           if os.environ.get('SUPABASE_URL') != 'https://pgljdmevusgvvlplaedt.supabase.co' or not os.environ.get('SUPABASE_SERVICE_ROLE_KEY'):
               raise SystemExit('Acceptance worker secrets are missing or target the wrong project.')
-          # Read metadata only; never claim a processing/cleanup lease as a probe.
+          # Read bucket metadata only; service_role intentionally has no direct app-table SELECT.
           try:
               api = SupabaseAPI(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_ROLE_KEY'])
-              conn, response = api._request('GET', '/rest/v1/frame_replays?select=frame_id&limit=0')
+              conn, response = api._request('GET', '/storage/v1/bucket/frame-replays')
               try:
-                  if response.read() != b'[]':
+                  bucket = json.loads(response.read())
+                  if bucket.get('id') != 'frame-replays' or bucket.get('public') is not False:
                       raise ValueError('Unexpected backend result')
               finally:
                   conn.close()
