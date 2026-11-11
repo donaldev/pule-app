@@ -90,3 +90,36 @@ queue rows. Remove the GitHub environment service-role secret when testing ends
 to disable future processing until explicitly reprovisioned. Preserve published
 replays and historical data. For an incident, use the runbook's server admission
 fence and forward-only rollback; flag-off alone does not block direct RPC callers.
+
+## Deployment checkpoint — 11 November 2026
+
+- Manual full-database backup restored successfully in isolated PostgreSQL 17.11;
+  all 72 table counts/content fingerprints matched the source snapshot. Existing
+  replay bytes were separately backed up, checksum-verified and fully decoded.
+- Atomic 002→003→004 committed; migration history now records all three versions.
+  The existing replay metadata and historical null timestamps compared unchanged.
+- Private source bucket created at 25 MiB; the existing private replay bucket and
+  its 25 MiB cap were preserved. Client private-ledger access remains denied.
+- Main-only GitHub environment/secrets configured. Readiness run
+  [43071996456](https://github.com/donaldev/pule-app/actions/runs/43071996456) and
+  empty-queue worker/cleanup smoke run
+  [43072983029](https://github.com/donaldev/pule-app/actions/runs/43072983029) passed.
+  No real recording has been processed by these runs; device acceptance is pending.
+- The existing Git-connected production host is **Cloudflare Pages**, at
+  `https://pule-app.pages.dev/`, rather than Netlify. Its deployed entry bundle was
+  checked and does not contain the upload selector. `netlify.toml` additionally
+  keeps the upload flag false if that documented host is used again. Only the
+  separate password-protected acceptance build enables the selector.
+- Temporary HTTPS origin authenticated with HTTP 401 for unauthenticated requests;
+  compiled app and recording download passed authenticated checks. Only its exact
+  callback URL was added to Supabase Auth; production Site URL, providers and all
+  previous redirects were preserved. Remove that temporary entry after testing,
+  preserving any redirects added by others since the test began.
+- A 20,863,780-byte copy of the supplied complete recording is available only
+  through the protected acceptance endpoint. Duration and phone rotation were
+  retained; the original file was not changed. The existing mobile metadata parser
+  accepts its 1280×720 encoded dimensions and rotation. It is not a generated replay.
+
+Local validation: manual-only workflow YAML/security checks, 11 PWA/cleanup tests,
+16 existing Python/media tests, lint and production/acceptance TypeScript/Vite
+builds passed. No changes to shot detection, Watch Replay or historical data.
