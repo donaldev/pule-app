@@ -1,0 +1,83 @@
+name: Replay acceptance test
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Manual acceptance operation (process-one claims the next eligible queued recording)
+        type: choice
+        required: true
+        default: check
+        options:
+          - check
+          - process-one
+          - cleanup-only
+
+permissions:
+  contents: read
+
+concurrency:
+  group: replay-acceptance-worker
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: replay-acceptance
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Prepare existing worker
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1
+          python -m pip install --disable-pip-version-check -r replay-worker/requirements.txt
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+          python replay-worker/replay_worker.py --check
+      - name: Verify worker credentials without claiming work
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'replay-worker')
+          from replay_worker import SupabaseAPI
+          if os.environ.get('SUPABASE_URL') != 'https://pgljdmevusgvvlplaedt.supabase.co' or not os.environ.get('SUPABASE_SERVICE_ROLE_KEY'):
+              raise SystemExit('Acceptance worker secrets are missing or target the wrong project.')
+          # Read metadata only; never claim a processing/cleanup lease as a probe.
+          try:
+              api = SupabaseAPI(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_ROLE_KEY'])
+              conn, response = api._request('GET', '/rest/v1/frame_replays?select=frame_id&limit=0')
+              try:
+                  if response.read() != b'[]':
+                      raise ValueError('Unexpected backend result')
+              finally:
+                  conn.close()
+          except Exception:
+              raise SystemExit('Acceptance credential verification failed; no recording was claimed.') from None
+          print('Acceptance credentials verified; no recording claimed.')
+          PY
+      - name: Process one queued recording
+        if: inputs.operation == 'process-one'
+        timeout-minutes: 25
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python replay-worker/replay_worker.py
+      - name: Run one bounded cleanup pass
+        if: always() && (inputs.operation == 'process-one' || inputs.operation == 'cleanup-only')
+        timeout-minutes: 3
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/storage/cleanup-frame-replays.mjs

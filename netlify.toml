@@ -5,6 +5,9 @@
 [build.environment]
   NODE_VERSION = "22"
 
+[context.production.environment]
+  VITE_FRAME_RECORDING_UPLOADS = "false"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
