@@ -137,7 +137,30 @@ def validate_corners(source, job):
         cap.release()
 
 
+def prepare_analysis_source(source, work):
+    """Use raw encoded pixels consistently across OpenCV backends. No re-encoding.
+
+    Browser corners invert the MP4 display matrix. Strip that matrix for analysis,
+    then restore it on the generated replay so playback retains phone orientation.
+    """
+    probe = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                            '-show_entries', 'stream_side_data=rotation', '-of', 'json', str(source)],
+                           check=True, capture_output=True, text=True, timeout=30)
+    streams = json.loads(probe.stdout).get('streams', [])
+    rotations = [item['rotation'] for stream in streams for item in stream.get('side_data_list', []) if 'rotation' in item]
+    angle = float(rotations[0]) if rotations else 0
+    if not math.isfinite(angle) or angle % 90 != 0:
+        raise ValueError('Unsupported source rotation')
+    angle = int(angle) % 360
+    analysis = work / 'analysis.mp4'
+    subprocess.run(['ffmpeg', '-y', '-v', 'error', '-display_rotation:v:0', '0', '-noautorotate', '-i', str(source),
+                    '-map', '0:v:0', '-map', '0:a?', '-c', 'copy', str(analysis)],
+                   check=True, capture_output=True, timeout=90)
+    return analysis, angle
+
+
 def process_recording(source, job, work):
+    source, rotation = prepare_analysis_source(source, work)
     corners = validate_corners(source, job)
     corner_path, output = work / 'corners.npy', work / 'replay.mp4'
     np.save(corner_path, corners)
@@ -157,6 +180,11 @@ def process_recording(source, job, work):
         clips = list(csv.DictReader(manifest))
     if not 1 <= len(clips) <= 1000:
         raise ValueError('Invalid generated clip count')
+    if rotation:
+        oriented = work / 'oriented-replay.mp4'
+        subprocess.run(['ffmpeg', '-y', '-v', 'error', '-display_rotation:v:0', str(rotation), '-noautorotate', '-i', str(output), '-c', 'copy', str(oriented)],
+                       check=True, capture_output=True, timeout=90)
+        oriented.replace(output)
     verified = verify_video(output)
     return output, {**verified, 'clip_count': len(clips)}
 

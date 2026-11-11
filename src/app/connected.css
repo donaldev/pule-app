@@ -927,3 +927,26 @@
 .replay-player video { display:block; width:100%; max-height:65dvh; background:#0B0E0C; border-radius:var(--radius-card); }
 .replay-player p { margin:16px 0; }
 .watch-replay { min-height:44px; }
+
+/* Full-frame uploads use the same dark replay dialog and touch-sized controls. */
+.modal:has(.recording-upload) { background:var(--surface); color:var(--text); border-color:var(--brass); width:min(720px,calc(100vw - 20px)); max-height:calc(100dvh - 20px); overflow-y:auto; overscroll-behavior:contain; }
+.modal:has(.recording-upload) h2, .modal:has(.recording-upload) .icon-button, .recording-upload .text-button { color:var(--text); }
+.recording-upload { display:grid; gap:14px; }
+.recording-upload p { margin:0; }
+.recording-upload video { width:100%; max-height:40dvh; background:#0B0E0C; }
+.recording-upload .button { width:100%; }
+.recording-upload .button-secondary { color:var(--text); border-color:var(--line); }
+.recording-upload progress { width:100%; accent-color:var(--brass); }
+.recording-file { display:grid; gap:8px; font-weight:700; }
+.recording-file input { max-width:100%; min-height:48px; }
+.recording-table { position:relative; border:1px solid var(--brass); background:#0B0E0C; }
+.recording-table[hidden] { display:none; }
+.recording-table canvas { display:block; width:100%; height:auto; }
+.recording-table svg { position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+.recording-table polygon { fill:#C4A46B33; stroke:#C4A46B; stroke-width:3; vector-effect:non-scaling-stroke; }
+.recording-table circle { fill:#C4A46B; stroke:#0B0E0C; stroke-width:2; }
+.recording-table text { fill:#0B0E0C; font-weight:800; pointer-events:none; }
+.recording-coordinates { display:flex; gap:12px; margin-top:8px; }
+.recording-coordinates label { flex:1; min-width:0; }
+.recording-coordinates input { width:100%; min-height:44px; color:var(--text); background:var(--felt); border:1px solid var(--line); padding:8px; }
+.recording-upload .connected-actions { flex-wrap:wrap; }

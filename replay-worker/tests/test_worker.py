@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import cv2
 import numpy as np
-from replay_worker import SupabaseAPI, validate_job, validate_corners, verify_video, run_once, process_recording
+from replay_worker import SupabaseAPI, validate_job, validate_corners, verify_video, run_once, process_recording, prepare_analysis_source
 
 UID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 LEASE = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
@@ -132,10 +132,35 @@ class WorkerTests(unittest.TestCase):
             child.wait(timeout=30)
             child.stderr.close()
             self.assertEqual(child.returncode, 0)
-            output, result = process_recording(source, JOB, work)
-            self.assertTrue(output.is_file())
-            self.assertGreater(result['clip_count'], 0)
-            self.assertGreater(result['duration_seconds'], 0)
+            for angle in (0, 90, 180, 270):
+                rotated = work / f'phone-{angle}.mp4'
+                subprocess.run(['ffmpeg', '-y', '-v', 'error', '-display_rotation:v:0', str(angle), '-i', str(source), '-c', 'copy', str(rotated)], check=True, capture_output=True)
+                jobdir = work / str(angle)
+                jobdir.mkdir()
+                output, result = process_recording(rotated, JOB, jobdir)
+                self.assertTrue(output.is_file())
+                self.assertGreater(result['clip_count'], 0)
+                self.assertGreater(result['duration_seconds'], 0)
+                probe = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                                        '-show_entries', 'stream_side_data=rotation', '-of', 'json', str(output)],
+                                       check=True, capture_output=True, text=True)
+                streams = json.loads(probe.stdout)['streams']
+                rotations = [item['rotation'] for stream in streams for item in stream.get('side_data_list', []) if 'rotation' in item]
+                self.assertEqual((int(rotations[0]) if rotations else 0) % 360, angle)
+
+    def test_phone_orientation_remux_preserves_encoded_dimensions_and_corner_space(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            original = work / 'source.mp4'
+            video(original)
+            for angle in (0, 90, 180, 270):
+                rotated = work / f'phone-{angle}.mp4'
+                subprocess.run(['ffmpeg', '-y', '-v', 'error', '-display_rotation:v:0', str(angle), '-i', str(original), '-c', 'copy', str(rotated)], check=True, capture_output=True)
+                jobdir = work / str(angle)
+                jobdir.mkdir()
+                analysis, rotation = prepare_analysis_source(rotated, jobdir)
+                self.assertEqual(rotation, angle)
+                self.assertEqual(validate_corners(analysis, JOB).shape, (4, 2))
 
     def test_supplied_renderer_generates_real_h264_replay(self):
         from replay_processor import render_replay

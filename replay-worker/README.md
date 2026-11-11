@@ -47,18 +47,26 @@ A human must then call the authenticated owner-only RPC:
 `queue_frame_replay_processing(p_upload, p_corners, p_width, p_height)`
 
 `p_corners` must be four finite `[x,y]` points, clockwise or counterclockwise around
-the table, in the ORIGINAL decoded recording's pixels. Supply the matching width
+the table, in the ORIGINAL encoded (unrotated) recording's pixels. Supply the matching width
 and height; values are not normalized coordinates, a preset from another camera,
 or positions in a resized preview. SQL rejects crossed/degenerate/out-of-bounds
 polygons. The worker opens that exact source and checks dimensions, convexity,
 bounds, minimum area and crop memory limits again before calling the detector.
-Videos with rotation metadata need coordinates matching OpenCV's decoded image;
-confirm this on the real mobile capture path. Do not infer corners automatically.
+The mobile UI reads the MP4 display matrix and inverts preview taps into these
+encoded pixels. The worker losslessly remuxes the source with zero display rotation
+for analysis, then restores the original display rotation on the generated replay.
+This avoids differences between OpenCV decoder backends without changing shot
+detection or re-encoding the recording. FFmpeg 6+ with `-display_rotation` is required.
+Confirm the real mobile capture path before rollout. Do not infer corners automatically.
 
-Without coordinates, the job remains uploaded and cannot be claimed. No selector
-UI is included here: a future upload UI must explicitly collect these coordinates
-(or an operator must supply them through the authenticated caller's workflow).
-The original offline processor can still be used with a human-created `.npy` file:
+Without coordinates, the job remains uploaded and cannot be claimed. The optional
+[mobile recording UI](../docs/FRAME_RECORDING_UI.md) now collects these coordinates
+explicitly; keep its feature flag disabled until this backend and updated worker
+are deployed.
+The original offline processor can still be used with a human-created `.npy` file
+for unrotated recordings. For rotated recordings use the worker path, which applies
+the new encoded-coordinate convention; the standalone detector retains its original
+OpenCV decoder behavior:
 
 ```sh
 python replay-worker/replay_processor.py --input recording.mp4 \
@@ -118,8 +126,8 @@ Run `python replay-worker/replay_worker.py` for one database job (or start the i
 with those runtime environment variables). Schedule short-lived runs, one active
 worker initially. Set a scheduler/container hard runtime cap below the 40-minute
 lease (e.g. 30 minutes), plus CPU, memory, PID and temporary-disk limits. Example
-resource envelope: two CPUs, 2 GiB memory, 128 PIDs, read-only root filesystem and
-1 GiB writable `/tmp`; adjust only after real-video measurements. A hard-killed job
+resource envelope: two CPUs, 3 GiB memory, 128 PIDs, read-only root filesystem and
+2 GiB writable `/tmp` (including the lossless orientation copy); adjust only after real-video measurements. A hard-killed job
 recovers through lease expiry. Do not run media decoding on the web/API host.
 
 Also schedule `node scripts/storage/cleanup-frame-replays.mjs` regularly with trusted

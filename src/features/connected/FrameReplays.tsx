@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Modal } from '../../components/ui/Primitives'
 import type { FrameReplay, SavedFrame } from '../../data/remote/database.types'
+import { RecordingUploadAction } from '../replays/RecordingUpload'
 import { listFrameReplays, signFrameReplay } from '../../data/remote/replayService'
 
 type Playback = { frame: SavedFrame; url?: string; error?: string }
-export function FrameReplays({ userId, sessionId, children }: {
+export function FrameReplays({ userId, sessionId, children, upload }: {
+  upload?: { playerId: string | null; detailEligible: boolean }
   userId: string; sessionId: string; children: (action: (frame: SavedFrame) => ReactNode) => ReactNode
 }) {
   const [replays, setReplays] = useState<FrameReplay[]>([])
@@ -40,7 +42,8 @@ export function FrameReplays({ userId, sessionId, children }: {
     {availability === 'loading' && <p role="status" className="annotation">Checking replays…</p>}
     {availability === 'failed' && <p role="alert" className="annotation">Replay availability could not be checked. <button type="button" className="text-button" onClick={() => { setAvailability('loading'); setAttempt(n => n + 1) }}>Check replays again</button></p>}
     {children(frame => availability === 'ready' && replays.some(r => r.frame_id === frame.id && r.group_id === frame.group_id)
-      ? <button type="button" className="text-button watch-replay" aria-label={`Watch Replay for frame ${frame.frame_number}`} onClick={() => void watch(frame)}>Watch Replay</button> : null)}
+      ? <button type="button" className="text-button watch-replay" aria-label={`Watch Replay for frame ${frame.frame_number}`} onClick={() => void watch(frame)}>Watch Replay</button> : availability === 'ready' && import.meta.env?.VITE_FRAME_RECORDING_UPLOADS === 'true' && upload?.detailEligible && frame.detail_eligible && frame.status === 'completed' && frame.participants.some(p => p.player_id === upload.playerId)
+        ? <RecordingUploadAction userId={userId} frame={frame} onPublished={() => setAttempt(n => n + 1)} /> : null)}
     {playback && <Modal title={`Frame ${playback.frame.frame_number} replay`} onClose={close}>
       <div className="replay-player">
         {!playback.url && !playback.error && <p role="status">Opening replay…</p>}

@@ -17,6 +17,12 @@ export interface SessionRow {
   revision: number; import_batch_id: UUID | null; legacy_match_id: string | null
   created_at: string; initial_breaker_id: UUID | null
 }
+export interface ReplayUploadStatus {
+ upload_id: UUID; frame_id: UUID; session_id: UUID; storage_path: string; bucket: 'frame-recordings'
+ status: 'reserved' | 'committed' | 'cleanup' | 'cleaned'; expected_bytes: number; content_type: 'video/mp4'; expires_at: string
+ processing_status?: 'uploaded' | 'queued' | 'processing' | 'completed' | 'failed' | null
+ retain_until?: string | null; attempts?: number | null; failure_code?: string | null
+}
 export interface FrameReplay { frame_id: UUID; group_id: UUID; session_id: UUID; storage_path: string; created_at: string }
 export interface FrameParticipant { player_id: UUID; side: 1 | 2; foul_count: number | null }
 export interface SavedFrame {
@@ -55,6 +61,10 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      reserve_frame_replay_upload: { Args: {p_operation:UUID;p_frame:UUID;p_bytes:number;p_content_type?:string};Returns:ReplayUploadStatus }
+      finalize_frame_replay_upload: { Args: {p_upload:UUID};Returns:ReplayUploadStatus }
+      get_my_frame_replay_upload: { Args: {p_upload:UUID};Returns:ReplayUploadStatus }
+      queue_frame_replay_processing: { Args: {p_upload:UUID;p_corners:Json;p_width:number;p_height:number};Returns:ReplayUploadStatus }
       create_player_invitation: { Args: {p_operation:UUID;p_group:UUID;p_player:UUID;p_email:string;p_token_hash:string};Returns:SetupResult }
       accept_player_invitation: { Args: {p_operation:UUID;p_token:string;p_token_hash:string};Returns:SetupResult }
       revoke_player_invitation: { Args: {p_operation:UUID;p_invitation:UUID};Returns:SetupResult }
