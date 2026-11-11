@@ -77,7 +77,10 @@ export function recordingR2(env, transport = fetch) {
                   quoted: p.ETag.startsWith('"') && p.ETag.endsWith('"'),
                   hex: /^[a-fA-F0-9]+$/.test(p.ETag.replaceAll('"', '')),
                   base64: /^[A-Za-z0-9+/]+={0,2}$/.test(p.ETag.replaceAll('"', '').trim()),
-                  hasWhitespace: /\s/.test(p.ETag)
+                  hasWhitespace: /\s/.test(p.ETag),
+                  characterTypes: [...new Set([...p.ETag].filter(c => !/[A-Za-z0-9+/=]/.test(c)))].map(c => ({
+                  code: c.charCodeAt(0)
+                  }))
                 }
               : null,
               etagMatches: typeof p.ETag === 'string'
