@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for Pule replay cleanup each five minutes
+
+[Timer]
+OnCalendar=*-*-* *:0/5:00 UTC
+Persistent=true
+Unit=pule-replay-cleanup.service
+
+[Install]
+WantedBy=timers.target

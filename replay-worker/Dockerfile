@@ -4,6 +4,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY replay_processor.py replay_worker.py ./
+RUN python replay_worker.py --check
 RUN useradd --system --create-home replay
 USER replay
 # Run one leased database job at a time. Credentials are runtime secrets only.

@@ -1,5 +1,10 @@
 # Pule Stage 1 replay processor and worker
 
+For deployment and rollback use the audited [ordered release checklist](../docs/FRAME_REPLAY_DEPLOYMENT_AUDIT.md),
+including atomic 002/003/004 application and CLI v3 history repair. Do not apply
+002 separately to a public project. `python replay-worker/replay_worker.py --check`
+checks local tools without claiming work; Docker builds enforce the same gate.
+
 Local integration only. Watch Replay and historical data are preserved. No remote
 migrations, Storage operations, scheduling or deployment have been performed.
 
@@ -14,8 +19,9 @@ still requires acceptance testing; synthetic tests do not establish shot accurac
 
 ## Backend and storage contract
 
-Apply the new `202611100003_frame_replay_processing.sql` after undeployed
-`202611100002_frame_replay_uploads.sql`, before enabling any upload endpoints.
+Apply `202611100002_frame_replay_uploads.sql`, `202611100003_frame_replay_processing.sql`
+and `202611100004_replay_cleanup_accounting.sql` atomically using the audited release
+bundle before enabling any upload endpoints.
 Do not release the intermediate 2A direct-publication contract as the final API.
 The follow-up migration refuses to apply if the 2A ledger already has attempts;
 reconcile any unexpected usage separately rather than guessing how to reinterpret

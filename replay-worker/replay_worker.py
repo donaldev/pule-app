@@ -234,9 +234,24 @@ def run_once(api, processor=process_recording):
             return {'job_id': job['job_id'], 'status': 'unconfirmed'}
 
 
+def verify_toolchain():
+    """Fail before leasing work if the installed tools cannot preserve orientation."""
+    help_result = subprocess.run(['ffmpeg', '-hide_banner', '-h', 'full'], check=True,
+                                 capture_output=True, text=True, timeout=10)
+    if '-display_rotation' not in help_result.stdout + help_result.stderr:
+        raise ValueError('FFmpeg 6+ with display_rotation is required')
+    subprocess.run(['ffprobe', '-version'], check=True, capture_output=True, timeout=10)
+
+
 def main():
-    argparse.ArgumentParser(description='Claim and process one trusted Pule replay job').parse_args()
+    parser = argparse.ArgumentParser(description='Claim and process one trusted Pule replay job')
+    parser.add_argument('--check', action='store_true', help='Validate local dependencies only; never claim or contact Supabase')
+    args = parser.parse_args()
     try:
+        verify_toolchain()
+        if args.check:
+            print(json.dumps({'status': 'toolchain_ready'}))
+            return
         result = run_once(SupabaseAPI(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_ROLE_KEY']))
         print(json.dumps(result))
         if result['status'] in ('failed', 'unconfirmed'):

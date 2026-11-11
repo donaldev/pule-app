@@ -5,12 +5,13 @@ import json
 import subprocess
 import tempfile
 import unittest
+import io
 from pathlib import Path
 from unittest.mock import patch
 
 import cv2
 import numpy as np
-from replay_worker import SupabaseAPI, validate_job, validate_corners, verify_video, run_once, process_recording, prepare_analysis_source
+from replay_worker import SupabaseAPI, validate_job, validate_corners, verify_video, run_once, process_recording, prepare_analysis_source, verify_toolchain, main
 
 UID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 LEASE = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
@@ -51,6 +52,23 @@ class FakeAPI:
 
 
 class WorkerTests(unittest.TestCase):
+    def test_toolchain_failure_cannot_claim_a_job(self):
+        with patch('sys.argv', ['replay_worker.py']), patch('replay_worker.verify_toolchain', side_effect=ValueError('old ffmpeg')), patch('replay_worker.run_once') as run, patch('sys.stdout', new_callable=io.StringIO):
+            with self.assertRaises(SystemExit):
+                main()
+            run.assert_not_called()
+
+    def test_check_needs_no_credentials_or_network(self):
+        with patch('sys.argv', ['replay_worker.py', '--check']), patch('replay_worker.verify_toolchain'), patch('replay_worker.SupabaseAPI') as api, patch('sys.stdout', new_callable=io.StringIO) as output:
+            main()
+            self.assertEqual(json.loads(output.getvalue())['status'], 'toolchain_ready')
+            api.assert_not_called()
+
+    def test_missing_display_rotation_is_rejected(self):
+        with patch('replay_worker.subprocess.run', return_value=subprocess.CompletedProcess([], 0, 'legacy ffmpeg', '')):
+            with self.assertRaises(ValueError):
+                verify_toolchain()
+
     def test_endpoint_rejects_redirect_targets_and_credentials(self):
         for url in ['http://example.com', 'https://user:pass@example.com', 'https://example.com/path', 'https://example.com?token=x']:
             with self.assertRaises(ValueError):

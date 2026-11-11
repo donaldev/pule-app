@@ -116,6 +116,18 @@ select test.ok((select count(*)>=2 from private.frame_replay_cleanup where bucke
 -- Legacy canonical playback remains intact, including historical null timestamps.
 insert into app.frame_replays(frame_id,group_id,session_id,storage_path) select id,group_id,session_id,session_id::text||'/'||id::text||'.mp4' from app.frames where id='90000000-0000-0000-0000-000000000001';
 select test.ok((select started_at is null and completed_at is null from app.frames where id='90000000-0000-0000-0000-000000000001'),'historical frame timestamps unchanged');
+-- An unrelated canonical replay must not permanently charge an abandoned attempt.
+set role authenticated;
+insert into test.upload_reservations select 4,app.reserve_frame_replay_upload(gen_random_uuid(),frame_id,100) from test.upload_cases where n=4;
+insert into storage.objects(bucket_id,name,owner_id,metadata) select 'frame-recordings',answer->>'storage_path',auth.uid()::text,'{"size":100,"mimetype":"video/mp4"}' from test.upload_reservations where n=4;
+reset role;
+insert into app.frame_replays(frame_id,group_id,session_id,storage_path) select frame_id,'10000000-0000-0000-0000-000000000001',session_id,session_id::text||'/'||frame_id::text||'.mp4' from test.upload_cases where n=4;
+update private.frame_replay_uploads set created_at=clock_timestamp()-interval '31 hours',expires_at=clock_timestamp()-interval '25 hours' where id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=4);
+select app.claim_frame_replay_cleanup();
+delete from storage.objects where bucket_id='frame-recordings' and name=(select answer->>'storage_path' from test.upload_reservations where n=4);
+select app.finish_frame_replay_cleanup(q.bucket_id,q.storage_path,q.lease_id,true) from private.frame_replay_cleanup q where q.upload_id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=4);
+select test.ok((select status='cleaned' from private.frame_replay_uploads where id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=4)),'unrelated legacy replay does not leak abandoned upload quota');
+select test.ok(exists(select 1 from app.frame_replays where frame_id=(select frame_id from test.upload_cases where n=4)),'cleanup leaves unrelated legacy replay untouched');
 -- Leave one queued job for independent-connection claim/publication/removal tests.
 set role authenticated;
 insert into test.upload_reservations select 3,app.reserve_frame_replay_upload(gen_random_uuid(),frame_id,100) from test.upload_cases where n=3;

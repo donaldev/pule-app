@@ -1,0 +1,12 @@
+[Unit]
+Description=Pule bounded replay Storage cleanup
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/pule/replay-workers.env
+WorkingDirectory=/opt/pule/current
+TimeoutStartSec=4min
+KillMode=control-group
+ExecStart=/usr/bin/node scripts/storage/cleanup-frame-replays.mjs

@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for queued Pule replay work each minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00 UTC
+Persistent=true
+Unit=pule-replay-process.service
+
+[Install]
+WantedBy=timers.target

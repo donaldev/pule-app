@@ -1,0 +1,13 @@
+[Unit]
+Description=Pule one-job replay processor
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/pule/replay-workers.env
+WorkingDirectory=/opt/pule/current
+TimeoutStartSec=30min
+KillMode=control-group
+ExecStart=/usr/bin/docker run --rm --init --name pule-replay-processing --read-only --cap-drop=ALL --security-opt=no-new-privileges:true --memory=3g --cpus=2 --pids-limit=128 --tmpfs /tmp:rw,noexec,nosuid,nodev,size=2g --env SUPABASE_URL --env SUPABASE_SERVICE_ROLE_KEY ${PULE_REPLAY_IMAGE}
+ExecStopPost=-/usr/bin/docker rm --force pule-replay-processing

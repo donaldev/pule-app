@@ -1,7 +1,8 @@
 # Mobile full-frame recording uploads — local implementation
 
 Enable `VITE_FRAME_RECORDING_UPLOADS=true` only after migrations through
-`202611100003_frame_replay_processing.sql`, private bucket limits and BOTH processing
+`202611100004_replay_cleanup_accounting.sql` via the
+[audited atomic rollout](FRAME_REPLAY_DEPLOYMENT_AUDIT.md), private bucket limits and BOTH processing
 and cleanup workers are ready. The example/default is false, preserving production
 Watch Replay while uploads are undeployed. No migrations or historical data were
 changed by this UI task. No remote upload, migration or deployment was performed.

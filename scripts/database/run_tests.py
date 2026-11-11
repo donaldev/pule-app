@@ -9,6 +9,7 @@ import getpass
 import json
 import os
 from pathlib import Path
+from build_replay_release import build_bundle
 import subprocess
 import uuid
 
@@ -18,9 +19,12 @@ ROOT = Path(__file__).resolve().parents[2]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--sql-test', choices=['frame_replay_processing.sql','frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
+    parser.add_argument('--atomic-replay-release', action='store_true', help='Apply the generated atomic replay release bundle locally')
     parser.add_argument('--port', type=int, default=55439)
     parser.add_argument('--upgrade-foundation', action='store_true', help='Seed original two migrations, then upgrade existing synthetic history')
     args = parser.parse_args()
+    if args.atomic_replay_release and args.sql_test == 'frame_replay_uploads.sql':
+        parser.error('The 2A checkpoint suite cannot run against the final atomic release contract.')
     name = 'pule_test_' + uuid.uuid4().hex[:12]
     env = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
     env.update(PGHOST='127.0.0.1', PGPORT=str(args.port), PGUSER=getpass.getuser(), PGDATABASE=name, PGCONNECT_TIMEOUT='5')
@@ -43,7 +47,24 @@ def main():
             if path.name == '202611040003_automatic_matchups.sql':
                 file(ROOT/'supabase/tests/matchup_binding_fixture.sql')
             # Preserve the 2A checkpoint suite; Stage 1 intentionally replaces its direct-publication contract.
-            if path.name == '202611100003_frame_replay_processing.sql' and args.sql_test == 'frame_replay_uploads.sql':
+            if path.name in ('202611100003_frame_replay_processing.sql','202611100004_replay_cleanup_accounting.sql') and args.sql_test == 'frame_replay_uploads.sql':
+                continue
+            if args.atomic_replay_release and path.name == '202611100002_frame_replay_uploads.sql':
+                # Prove a later prerequisite failure rolls back even the temporary
+                # 2A publication API, then apply the exact release artifact.
+                sql("delete from storage.buckets where id='frame-recordings'")
+                try:
+                    run('psql', '-X', '-v', 'ON_ERROR_STOP=1', input=build_bundle())
+                    raise AssertionError('Missing source bucket must abort the entire release')
+                except subprocess.CalledProcessError as error:
+                    if 'private_mp4_recordings_bucket_required' not in error.stderr:
+                        raise
+                assert sql("select to_regclass('private.frame_replay_uploads') is null and to_regprocedure('app.reserve_frame_replay_upload(uuid,uuid,bigint,text)') is null") == 't'
+                assert sql("select exists(select 1 from pg_constraint where conrelid='app.frame_replays'::regclass and conname='frame_replays_check')") == 't'
+                sql("insert into storage.buckets(id) values('frame-recordings')")
+                run('psql', '-X', '-v', 'ON_ERROR_STOP=1', input=build_bundle())
+                continue
+            if args.atomic_replay_release and path.name in ('202611100003_frame_replay_processing.sql','202611100004_replay_cleanup_accounting.sql'):
                 continue
             file(path)
             if args.upgrade_foundation and index == 2:
@@ -176,7 +197,7 @@ def main():
                     command = "select app.correct_frame(gen_random_uuid(),'%s',%s,'%s','30000000-0000-0000-0000-000000000001',0,0,'Late correction')" % (case['session'], revision, case['frame'])
                     sql(actor + "select test.denied($edit$%s$edit$,'%s','finalized correction denied %s')" % (command, code, code))
                 sql("select test.ok((select winner_id='30000000-0000-0000-0000-000000000002' from app.frames where id='%s'),'rejected corrections leave frame unchanged')" % case['frame'])
-            print(json.dumps({'focused_sql_test':args.sql_test,'assertions_passed':int(sql('select count(*) from test.results')),'synthetic_only':True}))
+            print(json.dumps({'focused_sql_test':args.sql_test,'assertions_passed':int(sql('select count(*) from test.results')),'synthetic_only':True,'atomic_release_rollback_verified':args.atomic_replay_release}))
             return
         file(ROOT/'supabase/tests/frame_replays.sql')
         file(ROOT/'supabase/tests/scoring.sql')
