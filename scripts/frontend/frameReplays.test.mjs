@@ -69,3 +69,7 @@ test('metadata failure keeps history and offers explicit availability refresh',a
 test('SessionView mounts replay viewing only in expanded Frame History for completed frames',async()=>{
  const source=await readFile(new URL('../../src/features/connected/SessionView.tsx',import.meta.url),'utf8');assert.match(source,/historyOpen && <FrameReplays/);assert.match(source,/f.status === 'completed' && watchReplay\(f\)/);assert.match(source,/key=\{`\$\{game.userId\}:\$\{sessionId\}`\}/)
 })
+
+test('metadata accepts server-assigned attempt paths while rejecting traversal and arbitrary suffixes',async()=>{
+ resetService();const base='night/frame/';const attempt='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.mp4';s.rows=[replay,{...replay,storage_path:base+attempt},{...replay,storage_path:base+'../other.mp4'},{...replay,storage_path:base+'arbitrary.mp4'}];assert.deepEqual((await listFrameReplays('user','night')).map(r=>r.storage_path),['night/frame.mp4',base+attempt])
+})

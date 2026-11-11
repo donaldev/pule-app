@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sql-test', choices=['frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
+    parser.add_argument('--sql-test', choices=['frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
     parser.add_argument('--port', type=int, default=55439)
     parser.add_argument('--upgrade-foundation', action='store_true', help='Seed original two migrations, then upgrade existing synthetic history')
     args = parser.parse_args()
@@ -51,6 +51,60 @@ def main():
             file(ROOT/'supabase/tests/fixtures.sql')
         if args.sql_test:
             file(ROOT/'supabase/tests'/args.sql_test)
+            if args.sql_test == 'frame_replay_uploads.sql':
+                owner = "set role authenticated; set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';"
+                opponent = "set role authenticated; set request.jwt.claim.sub='20000000-0000-0000-0000-000000000002';"
+                def completed_case():
+                    state = json.loads(sql(owner + "select app.start_session(gen_random_uuid(),'10000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001',array['30000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000002']::uuid[],'30000000-0000-0000-0000-000000000001')").splitlines()[-1])
+                    sid = state['session']['id']
+                    state = json.loads(sql(owner + "select app.start_frame(gen_random_uuid(),'%s',1,array['30000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000002']::uuid[],'30000000-0000-0000-0000-000000000001')" % sid).splitlines()[-1])
+                    fid = state['frames'][0]['id']
+                    sql(owner + "select app.complete_frame(gen_random_uuid(),'%s',2,'%s','30000000-0000-0000-0000-000000000001',0,0,false,'regular')" % (sid, fid))
+                    return sid, fid
+                sid, fid = completed_case()
+                def reserve_competing(actor):
+                    try:
+                        return actor, json.loads(sql(actor + "select app.reserve_frame_replay_upload(gen_random_uuid(),'%s',100)" % fid).splitlines()[-1])
+                    except subprocess.CalledProcessError as error:
+                        if 'frame_upload_reserved' not in error.stderr:
+                            raise
+                        return actor, None
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    reservations = list(pool.map(reserve_competing, [owner, opponent]))
+                assert sum(r is not None for _, r in reservations) == 1
+                actor, upload = next((a, r) for a, r in reservations if r is not None)
+                actor_id = '20000000-0000-0000-0000-000000000001' if actor == owner else '20000000-0000-0000-0000-000000000002'
+                sql("insert into storage.objects(bucket_id,name,owner_id,metadata) values('frame-replays','%s','%s','{\"size\":100,\"mimetype\":\"video/mp4\"}')" % (upload['storage_path'], actor_id))
+                def finalize_one(_):
+                    return json.loads(sql(actor + "select app.finalize_frame_replay_upload('%s')" % upload['upload_id']).splitlines()[-1])
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    finalized = list(pool.map(finalize_one, range(2)))
+                assert finalized[0] == finalized[1]
+                sql("select test.ok((select count(*)=1 from app.frame_replays where frame_id='%s'),'independent competing reservations and finalizations register one replay')" % fid)
+                _, same_frame = completed_case()
+                operation = str(uuid.uuid4())
+                statement = owner + "select app.reserve_frame_replay_upload('%s','%s',100)" % (operation, same_frame)
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    same = list(pool.map(lambda _: json.loads(sql(statement).splitlines()[-1]), range(2)))
+                assert same[0] == same[1]
+                sql("select test.ok((select count(*)=1 from private.frame_replay_uploads where operation_id='%s'),'independent same-key reservation returns one attempt')" % operation)
+                # Opponent has no active reservation after finalization, so can race removal.
+                race_sid, race_frame = completed_case()
+                race = json.loads(sql(opponent + "select app.reserve_frame_replay_upload(gen_random_uuid(),'%s',100)" % race_frame).splitlines()[-1])
+                sql("insert into storage.objects(bucket_id,name,owner_id,metadata) values('frame-replays','%s','20000000-0000-0000-0000-000000000002','{\"size\":100,\"mimetype\":\"video/mp4\"}')" % race['storage_path'])
+                def race_finalize():
+                    try:
+                        sql(opponent + "select app.finalize_frame_replay_upload('%s')" % race['upload_id'])
+                    except subprocess.CalledProcessError as error:
+                        if 'replay_upload_denied' not in error.stderr:
+                            raise
+                def race_remove():
+                    sql(owner + "select app.remove_match(gen_random_uuid(),'%s',3,'abandon')" % race_sid)
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    jobs = [pool.submit(race_finalize), pool.submit(race_remove)]
+                    for job in jobs:
+                        job.result()
+                sql("select test.ok(not exists(select 1 from app.frame_replays where frame_id='%s') and exists(select 1 from private.frame_replay_cleanup where storage_path='%s'),'concurrent removal never leaves registered metadata or loses cleanup')" % (race_frame, race['storage_path']))
             if args.sql_test == 'automatic_player_identity.sql':
                 actor = "set role authenticated; set request.jwt.claim.sub='21000000-0000-0000-0000-000000000006';"
                 def initialize_one(_):

@@ -8,7 +8,12 @@ export async function listFrameReplays(userId: string, sessionId: string): Promi
     .setHeader('Authorization', authorization).retry(false).abortSignal(AbortSignal.timeout(20_000))
   if (error || !data) throw new Error('Replay availability could not be checked.')
   await actorAuthorization(userId)
-  return data.filter(row => row.session_id === sessionId && row.storage_path === `${sessionId}/${row.frame_id}.mp4`)
+  return data.filter(row => {
+    if (row.session_id !== sessionId) return false
+    const base = `${sessionId}/${row.frame_id}`
+    return row.storage_path === `${base}.mp4` || (row.storage_path.startsWith(`${base}/`)
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.mp4$/.test(row.storage_path.slice(base.length + 1)))
+  })
 }
 
 export async function signFrameReplay(userId: string, replay: FrameReplay): Promise<string> {
