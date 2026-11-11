@@ -1,3 +1,4 @@
+import { getMyPlayerInitialization } from './playerInitializationService'
 import { getMyInvitations, tokenHash } from './identityService'
 import { getMyMatchups } from './setupService'
 import { actorAuthorization, getSupabase } from './supabase'
@@ -26,6 +27,12 @@ export async function reconcileReceipt(intent: Intent, receipt: ReceiptLookup) {
     return current // A later correction/revision is valid; never replace it with an old receipt snapshot.
   }
   const entity = receipt.saved.entity_id
+  if(intent.name==='initialize_my_player'){
+    const current=await getMyPlayerInitialization(intent.userId)
+    if(current.status!=='linked'||current.id!==entity||current.group_id!==receipt.group_id)throw new Error('Account link could not be confirmed.')
+    await actorAuthorization(intent.userId)
+    return {id:entity,group_id:receipt.group_id}
+  }
   if(intent.name==='remove_match'){
     const data=await getRemovedMatch(String(intent.args.p_session),intent.userId)
     if(data.id!==entity || data.group_id!==receipt.group_id || data.mode!==intent.args.p_mode)throw new Error('Removal could not be confirmed.')

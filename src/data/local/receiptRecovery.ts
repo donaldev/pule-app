@@ -11,6 +11,7 @@ export function expectedCommand(intent: Intent): Record<string, unknown> {
   let data: Record<string, unknown>
   if (intent.kind === 'setup') {
     switch (intent.name) {
+      case 'initialize_my_player': data={name:a.p_name??null}; break;
       case 'create_group': data = { name: a.p_name, timezone: a.p_timezone }; break
       case 'remove_match': data={session_id:a.p_session,expected_revision:a.p_expected_revision,mode:a.p_mode}; break
       case 'claim_guest_email': data={player_id:a.p_player}; break
@@ -23,7 +24,7 @@ export function expectedCommand(intent: Intent): Record<string, unknown> {
       case 'adopt_rule_version': data = { name: a.p_label, confirmed: a.p_confirm_review }; break
       default: throw new Error('Unsupported command context.')
     }
-    return { action: intent.name==='create_guest_with_email'?'create_guest':intent.name, group_id: ['remove_match','claim_guest_email','create_group','resolve_matchup','accept_player_invitation','revoke_player_invitation'].includes(intent.name) ? null : a.p_group, data }
+    return { action: intent.name==='create_guest_with_email'?'create_guest':intent.name, group_id: ['initialize_my_player','remove_match','claim_guest_email','create_group','resolve_matchup','accept_player_invitation','revoke_player_invitation'].includes(intent.name) ? null : a.p_group, data }
   }
   switch (intent.name) {
     case 'start_session': data = { group_id: a.p_group, venue_id: a.p_venue, rule_version_id: a.p_rule_version, players: a.p_players, breaker_id: a.p_breaker, season_id: a.p_season ?? null }; break

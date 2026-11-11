@@ -1,6 +1,6 @@
 import type { Intent } from './operationCoordinator'
 const scoring=new Set(['start_session','start_frame','complete_frame','correct_frame','finalize_session','set_frame_paused'])
-const setup=new Set(['create_group','create_guest','create_guest_with_email','create_venue','adopt_rule_version','resolve_matchup','create_player_invitation','accept_player_invitation','revoke_player_invitation','claim_guest_email','remove_match'])
+const setup=new Set(['create_group','create_guest','create_guest_with_email','create_venue','adopt_rule_version','resolve_matchup','create_player_invitation','accept_player_invitation','revoke_player_invitation','claim_guest_email','initialize_my_player','remove_match'])
 export function validIntent(value:unknown,userId:string):value is Intent {
   if(!value||typeof value!=='object')return false
   const v=value as Partial<Intent>

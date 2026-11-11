@@ -116,3 +116,12 @@ test('startup clears obsolete removal only with authorized exact-target outcome 
  assert.equal(clears,correct?1:0);assert.equal(result.intent===null,correct)
  }
 })
+test('startup retains identity initialization until explicit receipt acknowledgment without replay',async()=>{
+ let saved={...intent('initialize_my_player'),args:{p_operation:'original-op',p_name:'Person'}}
+ assert.equal(validIntent(saved,'account'),true)
+ const queue=new OperationCoordinator({read:async()=>structuredClone(saved),remove:async()=>{saved=null}},async()=>{throw Error('must not replay initialization')})
+ const receipt={status:'confirmed_committed',operation_id:'original-op',actor_id:'account',group_id:'origin',command:{action:'initialize_my_player',group_id:null,data:{name:'Person'}},committed_at:'2026-11-10',saved:{kind:'setup',entity_id:'player'}}
+ const result=await restoreStartupRecovery(queue,'account',async()=>receipt,async()=>({id:'player',group_id:'origin'}))
+ assert.equal(result.intent.name,'initialize_my_player');assert.notEqual(saved,null)
+ assert.equal((await queue.checkSaved('account',async()=>receipt,async()=>({id:'player',group_id:'origin'}))).status,'confirmed_committed');assert.equal(saved,null)
+})

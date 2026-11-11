@@ -12,6 +12,7 @@ import { AuthScreen } from '../features/auth/components/AuthScreen'
 import { initializeAuth, onAuthStateChange, signOut } from '../features/auth/services/authService'
 import { errorMessage, useConnectedGame, type ConnectedGame } from '../features/connected/useConnectedGame'
 import { PlayWelcome, NightSetup } from '../features/connected/SetupViews'
+import { PlayerInitialization } from '../features/identity/PlayerInitialization'
 import { SessionView } from '../features/connected/SessionView'
 const PersonalHome = lazy(() => import('../features/results/ResultsViews').then(m => ({ default: m.PersonalHome })))
 const HistoryView = lazy(() => import('../features/results/ResultsViews').then(m => ({ default: m.HistoryView })))
@@ -102,6 +103,7 @@ function ConnectedApp({ session }: { session: Session }) {
 
       {!online && !game.intent && <div className="notice notice-warning" role="status">You’re offline. Connect to the internet to save scores.</div>}
       <main id="main" className={`main-content ${live ? 'main-live' : ''}`} tabIndex={-1} ref={main}>
+        <PlayerInitialization game={game} route={route} claimPrompt={<Suspense fallback={null}><GuestEmailClaimPrompt game={game}/></Suspense>}>
         {!live&&!route.startsWith('/claim/')&&!game.loading&&!game.matchupCatalog?.player_id&&<Suspense fallback={null}><GuestEmailClaimPrompt game={game}/></Suspense>}
         <Suspense fallback={<p role="status">Loading…</p>}>{game.loading && !['/home','/account'].includes(route) && !route.startsWith('/matches') ? <p role="status">Loading your matches…</p> : route === '/account' ? <div className="narrow-page connected-form account-page"><PageHeading label="" title="Account">{session.user.email}</PageHeading><AccountIdentity key={game.groupId} game={game} /><AppUpdateStatus protectedWork={game.busy||!!game.intent||!!game.recoveryProblem||!game.ready||game.state?.session.status==='active'}/>{(game.recoveryProblem||game.intent)&&<details className="recovery-details"><summary>Local save recovery</summary>{game.recoveryProblem?<RecoveryStoragePanel game={game}/>:<><p>Your original saved request is retained.</p><button className="text-button" disabled={game.busy} onClick={()=>void game.checkSaved()}>Check saved status</button>{game.lookupNotice&&<p role="status">{game.lookupNotice}</p>}{game.intent?.name==='remove_match'&&<button className="text-button" disabled={game.busy} onClick={()=>void game.checkRemovedMatch()}>Check whether the match was removed</button>}{game.intent&&['pending','uncertain'].includes(game.intent.status)&&<button className="text-button" disabled={game.busy} onClick={()=>{if(window.confirm('Resend the original saved action? This can change match data if it has not already been saved.'))void game.retry()}}>Resend original action</button>}{game.intent&&['conflict','rejected'].includes(game.intent.status)&&<button className="text-button" disabled={game.busy} onClick={()=>{if(window.confirm('Remove this rejected local request and refresh?'))void game.discardRejected()}}>Clear rejected request</button>}</>}</details>}{accountError && <p role="alert" className="connected-error">{accountError}<button type="button" className="text-button notification-close" aria-label="Close sign-out error" onClick={()=>setAccountError('')}>×</button></p>}<button className="button button-secondary mt-6" disabled={game.busy} onClick={() => void logout()}>Sign out</button></div>
           : /^\/claim\/[a-f0-9]{64}$/.test(route) ? <ClaimInvitation key={route} game={game} token={route.split('/')[2]} />
@@ -115,6 +117,7 @@ function ConnectedApp({ session }: { session: Session }) {
           : <>{game.sessions.some(s => s.status === 'active') && <section className="resume-nights" aria-label="Your active match nights">{game.sessions.filter(s => s.status === 'active').map(s => <a className="connected-match-row" key={s.id} href={`#/session/${s.id}`}><div><strong>Resume match night</strong><p className="annotation">{displayDate(s.occurred_on)} · {game.options?.venues.find(v => v.id === s.venue_id)?.display_name ?? 'Match night'}</p></div><Icon name="arrow" /></a>)}</section>}<NightSetup key={game.groupId} game={game} /></>}
 
         </Suspense>
+        </PlayerInitialization>
       </main>
     </div><nav className="mobile-nav" aria-label="Mobile navigation">{nav}</nav>
   </div>

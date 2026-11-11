@@ -5,6 +5,7 @@ do $$ begin
 end $$;
 create schema auth;
 create table auth.users(id uuid primary key, email text, email_confirmed_at timestamptz,
+ raw_user_meta_data jsonb not null default '{}',
  confirmation_sent_at timestamptz,banned_until timestamptz,deleted_at timestamptz);
 create table auth.identities(id uuid primary key default gen_random_uuid(),user_id uuid references auth.users,
  provider text not null,identity_data jsonb not null);

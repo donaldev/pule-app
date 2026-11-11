@@ -3,7 +3,7 @@ import { DatabaseOperationError } from './scoringService'
 import type { Database, SetupResult } from './database.types'
 
 type Functions = Database['app']['Functions']
-type SetupCommand = 'remove_match' | 'claim_guest_email' | 'create_group' | 'create_guest_with_email' | 'create_guest' | 'create_venue' | 'adopt_rule_version' | 'resolve_matchup' | 'create_player_invitation' | 'accept_player_invitation' | 'revoke_player_invitation'
+type SetupCommand = 'initialize_my_player' | 'remove_match' | 'claim_guest_email' | 'create_group' | 'create_guest_with_email' | 'create_guest' | 'create_venue' | 'adopt_rule_version' | 'resolve_matchup' | 'create_player_invitation' | 'accept_player_invitation' | 'revoke_player_invitation'
 
 /** Stable operation IDs belong to the caller; setup retries do not create duplicates. */
 export async function saveSetupCommand<Name extends SetupCommand>(name: Name, args: Functions[Name]['Args'], expectedUserId?: string) {

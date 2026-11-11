@@ -11,7 +11,7 @@ import { chooseGroup, readLastGroup, rememberGroup } from './groupPreference'
 
 type Functions = Database['app']['Functions']
 export type ScoringName = 'start_session' | 'start_frame' | 'complete_frame' | 'correct_frame' | 'finalize_session' | 'set_frame_paused'
-export type SetupName = 'remove_match' | 'claim_guest_email' | 'create_group' | 'create_guest_with_email' | 'create_guest' | 'create_venue' | 'resolve_matchup' | 'create_player_invitation' | 'accept_player_invitation' | 'revoke_player_invitation'
+export type SetupName = 'initialize_my_player' | 'remove_match' | 'claim_guest_email' | 'create_group' | 'create_guest_with_email' | 'create_guest' | 'create_venue' | 'resolve_matchup' | 'create_player_invitation' | 'accept_player_invitation' | 'revoke_player_invitation'
 export function errorMessage(error: unknown) {
   if(error instanceof Error) {
     if(error.message.includes('match_removal_requires_owner_or_admin'))return 'Only a match owner or admin can remove this match.'
@@ -24,7 +24,7 @@ export function errorMessage(error: unknown) {
 }
 const scoringNames = new Set(['start_session', 'start_frame', 'complete_frame', 'correct_frame', 'finalize_session', 'set_frame_paused'])
 // Retain dispatch of old saved intents; no UI can create a rule-adoption request.
-const setupNames = new Set(['remove_match','claim_guest_email', 'create_group', 'create_guest_with_email', 'create_guest', 'create_venue', 'adopt_rule_version', 'resolve_matchup', 'create_player_invitation', 'accept_player_invitation', 'revoke_player_invitation'])
+const setupNames = new Set(['initialize_my_player','remove_match','claim_guest_email', 'create_group', 'create_guest_with_email', 'create_guest', 'create_venue', 'adopt_rule_version', 'resolve_matchup', 'create_player_invitation', 'accept_player_invitation', 'revoke_player_invitation'])
 async function send(intent: Intent) {
   if(navigator.onLine===false)throw new Error('You’re offline. Connect to the internet before saving.')
   if (intent.kind === 'scoring' && scoringNames.has(intent.name)) {

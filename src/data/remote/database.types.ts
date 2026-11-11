@@ -65,6 +65,8 @@ export interface Database {
       create_group: { Args: { p_operation: UUID; p_name: string; p_timezone: string }; Returns: SetupResult }
       remove_match: {Args:{p_operation:UUID;p_session:UUID;p_expected_revision:number;p_mode:'abandon'|'delete'};Returns:SetupResult}
       get_match_removal: {Args:{p_session:UUID};Returns:SetupResult}
+      get_my_player_initialization: {Args:Record<never,never>;Returns:Json}
+      initialize_my_player: {Args:{p_operation:UUID;p_name?:string|null};Returns:SetupResult}
       get_my_frame_summary: {Args:{p_opponent?:UUID|null};Returns:Json}
       get_my_performance: {Args:Record<never,never>;Returns:Json}
       get_guest_email_claim: {Args:Record<never,never>;Returns:Json}

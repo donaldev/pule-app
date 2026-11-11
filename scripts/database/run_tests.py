@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sql-test', choices=['frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the focused guest-email checks')
+    parser.add_argument('--sql-test', choices=['automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
     parser.add_argument('--port', type=int, default=55439)
     parser.add_argument('--upgrade-foundation', action='store_true', help='Seed original two migrations, then upgrade existing synthetic history')
     args = parser.parse_args()
@@ -50,6 +50,14 @@ def main():
             file(ROOT/'supabase/tests/fixtures.sql')
         if args.sql_test:
             file(ROOT/'supabase/tests'/args.sql_test)
+            if args.sql_test == 'automatic_player_identity.sql':
+                actor = "set role authenticated; set request.jwt.claim.sub='21000000-0000-0000-0000-000000000006';"
+                def initialize_one(_):
+                    return json.loads(sql(actor + "select app.initialize_my_player(gen_random_uuid(),'Concurrent person')").splitlines()[-1])
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    initialized = list(pool.map(initialize_one, range(2)))
+                assert initialized[0] == initialized[1], 'Concurrent initialization must preserve one identity'
+                sql("select test.ok((select count(*)=1 from private.player_account_links where user_id='21000000-0000-0000-0000-000000000006'),'independent concurrent requests retain exactly one player')")
             if args.sql_test == 'match_removal.sql':
                 owner = "set role authenticated; set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';"
                 game = json.loads(sql(owner + "select app.start_session(gen_random_uuid(),'10000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001',array['30000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000002']::uuid[],'30000000-0000-0000-0000-000000000001')").splitlines()[-1])

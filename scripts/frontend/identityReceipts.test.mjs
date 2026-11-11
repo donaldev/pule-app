@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import ts from 'typescript'
 let src=await readFile(new URL('../../src/data/remote/receiptService.ts',import.meta.url),'utf8')
+src=src.replace("import { getMyPlayerInitialization } from './playerInitializationService'", 'const getMyPlayerInitialization=()=>globalThis.__identityReceipt.initialization()')
 src=src.replace("import { getMyInvitations, tokenHash } from './identityService'", "const getMyInvitations=()=>globalThis.__identityReceipt.invites();const tokenHash=async s=>globalThis.__identityReceipt.hash(s)")
  .replace("import { getMyMatchups } from './setupService'",'const getMyMatchups=()=>globalThis.__identityReceipt.catalog()')
  .replace("import { actorAuthorization, getSupabase } from './supabase'",'const actorAuthorization=async id=>{if(id!==globalThis.__identityReceipt.actor)throw Error("Wrong account")};const getSupabase=()=>{}')
@@ -34,4 +35,13 @@ test('invitation creation receipt needs matching player and recipient; revocatio
  await reconcileReceipt(intent,r)
  await assert.rejects(reconcileReceipt({...intent,args:{...intent.args,p_email:'other@example.invalid'}},r))
  await assert.rejects(reconcileReceipt({...intent,name:'revoke_player_invitation'},r))
+})
+test('initialization receipt requires the same caller link and origin group',async()=>{
+ reset();const intent={name:'initialize_my_player',userId:'recipient',args:{p_name:null}}
+ globalThis.__identityReceipt.initialization=async()=>({status:'linked',id:'sean',group_id:'matchup'})
+ assert.deepEqual(await reconcileReceipt(intent,receipt),{id:'sean',group_id:'matchup'})
+ for(const value of [{status:'linked',id:'other',group_id:'matchup'},{status:'linked',id:'sean',group_id:'other'},{status:'claim_required'}]){
+ globalThis.__identityReceipt.initialization=async()=>value;await assert.rejects(reconcileReceipt(intent,receipt),/link could not/)
+ }
+ globalThis.__identityReceipt.initialization=async()=>({status:'linked',id:'sean',group_id:'matchup'});globalThis.__identityReceipt.actor='other';await assert.rejects(reconcileReceipt(intent,receipt),/Wrong account/)
 })
