@@ -24,7 +24,7 @@ export function recordingR2(env, transport = fetch) {
     return u
   }
   async function request(method, key, query = {}, headers = {}, body) {
-    const signed = await aws.sign(url(key, query), { method, headers, body, redirect: 'error' })
+    const signed = await aws.sign(url(key, query), { method, headers, body, redirect: 'manual' })
     return transport(signed, { signal: AbortSignal.timeout(25000), redirect: 'error' })
   }
   async function text(response) {
