@@ -25,7 +25,7 @@ export function recordingR2(env, transport = fetch) {
   }
   async function request(method, key, query = {}, headers = {}, body) {
     const signed = await aws.sign(url(key, query), { method, headers, body, redirect: 'manual' })
-    return transport(signed, { signal: AbortSignal.timeout(25000), redirect: 'error' })
+    return transport(signed, { signal: AbortSignal.timeout(25000), redirect: 'manual' })
   }
   async function text(response) {
     if (!response.ok) throw Error('Storage operation unavailable')
