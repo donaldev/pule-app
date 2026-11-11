@@ -65,7 +65,7 @@ export function recordingR2(env, transport = fetch) {
             !Number.isSafeInteger(Number(p.Size)) ||
             Number(p.Size) <= 0 ||
             typeof p.ETag !== 'string' ||
-            !/^"?[a-fA-F0-9]{32}"?$/.test(p.ETag.trim())
+            !/^(?:"[A-Za-z0-9+/=]{24,128}"|[A-Za-z0-9+/=]{24,128})$/.test(p.ETag.trim())
           ) {
             console.error('Invalid R2 part fields', {
               partNumber: p.PartNumber,
