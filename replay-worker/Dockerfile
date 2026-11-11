@@ -3,7 +3,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libglib2
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY replay_processor.py replay_worker.py ./
+COPY replay_processor.py replay_worker.py r2_source.py ./
 RUN python replay_worker.py --check
 RUN useradd --system --create-home replay
 USER replay

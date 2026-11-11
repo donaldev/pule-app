@@ -1,3 +1,4 @@
+import { r2Command, r2RecordingEnabled, transferR2Recording } from './r2Recording'
 import { Upload } from 'tus-js-client'
 import { actorAuthorization, getSupabase } from './supabase'
 import type { Database, ReplayUploadStatus } from './database.types'
@@ -6,10 +7,10 @@ import type { Point } from '../../features/replays/recordingGeometry'
 type Commands = 'reserve_frame_replay_upload' | 'finalize_frame_replay_upload' | 'get_my_frame_replay_upload' | 'queue_frame_replay_processing'
 export function validateUploadStatus(value: unknown): ReplayUploadStatus {
   const r = value as ReplayUploadStatus | null
-  if (!r || r.bucket !== 'frame-recordings' || !['reserved', 'committed', 'cleanup', 'cleaned'].includes(r.status)
+  if (!r || !(r.bucket === 'frame-recordings' && (!r.source_provider || r.source_provider === 'supabase') || r.bucket === 'pule-frame-recordings' && r.source_provider === 'r2') || !['reserved', 'committed', 'cleanup', 'cleaned'].includes(r.status)
     || ![r.upload_id, r.frame_id, r.session_id].every(id => typeof id === 'string' && /^[0-9a-f-]{36}$/.test(id))
     || r.storage_path !== `${r.session_id}/${r.frame_id}/${r.upload_id}.mp4` || !Number.isFinite(Date.parse(r.expires_at))
-    || !Number.isSafeInteger(r.expected_bytes) || r.expected_bytes < 1 || r.expected_bytes > 262144000
+    || !Number.isSafeInteger(r.expected_bytes) || r.expected_bytes < 1 || r.expected_bytes > (r.source_provider === 'r2' ? 2147483648 : 262144000)
     || (r.processing_status != null && !['uploaded', 'queued', 'processing', 'completed', 'failed'].includes(r.processing_status))) throw Error('Recording uploads are unavailable. Check that the processing backend is installed.')
   return r
 }
@@ -26,8 +27,8 @@ async function command<Name extends Commands>(userId: string, name: Name, args: 
   await actorAuthorization(userId)
   return validateUploadStatus(data)
 }
-export const reserveRecording = (userId: string, frameId: string, operation: string, bytes: number) => command(userId, 'reserve_frame_replay_upload', { p_operation: operation, p_frame: frameId, p_bytes: bytes, p_content_type: 'video/mp4' })
-export const finalizeRecording = (userId: string, id: string) => command(userId, 'finalize_frame_replay_upload', { p_upload: id })
+export const reserveRecording = (userId: string, frameId: string, operation: string, bytes: number, hash?: string, provider?: string) => (provider === 'r2' || !provider && r2RecordingEnabled()) ? r2Command(userId, { action: 'reserve', operation, frame: frameId, bytes, hash }).then(validateUploadStatus) : command(userId, 'reserve_frame_replay_upload', { p_operation: operation, p_frame: frameId, p_bytes: bytes, p_content_type: 'video/mp4' })
+export const finalizeRecording = (userId: string, id: string, provider?: string) => provider === 'r2' ? r2Command(userId, { action: 'complete', upload: id }).then(validateUploadStatus) : command(userId, 'finalize_frame_replay_upload', { p_upload: id })
 export const getRecordingStatus = (userId: string, id: string) => command(userId, 'get_my_frame_replay_upload', { p_upload: id })
 export const queueRecording = (userId: string, id: string, corners: Point[], width: number, height: number) => command(userId, 'queue_frame_replay_processing', { p_upload: id, p_corners: corners, p_width: width, p_height: height })
 export function recordingEndpoint(project: string) {
@@ -39,6 +40,7 @@ export function recordingEndpoint(project: string) {
 }
 /** No automatic retries/background sync. Explicit resume reuses the same TUS resource. */
 export function transferRecording(file: File, userId: string, reservation: ReplayUploadStatus, hash: string, progress: (percent: number) => void) {
+  if (reservation.source_provider === 'r2') return transferR2Recording(file, userId, reservation, progress)
   const endpoint = recordingEndpoint(import.meta.env.VITE_SUPABASE_URL)
   let stopped = false
   let unsubscribe = () => {}

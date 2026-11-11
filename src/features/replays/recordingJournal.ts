@@ -1,7 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import type { RecordingGeometry, Point } from './recordingGeometry'
 export interface RecordingDraft {
- version: 1; userId: string; frameId: string; operation: string; hash: string; bytes: number
+ source_provider?: 'supabase' | 'r2'; version: 1; userId: string; frameId: string; operation: string; hash: string; bytes: number
  reservationRequested?: boolean; uploadId?: string; transferred?: boolean; geometry: RecordingGeometry; corners: Point[]
 }
 export function recordingKey(project: string, userId: string, frameId: string) { return `pule:recording:v1:${project}:${userId}:${frameId}` }
@@ -9,8 +9,8 @@ export function readRecording(key: string, userId: string, frameId: string): Rec
   const raw = localStorage.getItem(key)
   if (!raw) return null
   const draft = JSON.parse(raw) as RecordingDraft
-  if (draft.version !== 1 || draft.userId !== userId || draft.frameId !== frameId || !/^[0-9a-f-]{36}$/.test(draft.operation)
-    || !/^[0-9a-f]{64}$/.test(draft.hash) || !Number.isSafeInteger(draft.bytes) || draft.bytes < 1 || draft.bytes > 262144000
+  if (draft.source_provider !== undefined && !['supabase', 'r2'].includes(draft.source_provider) || draft.version !== 1 || draft.userId !== userId || draft.frameId !== frameId || !/^[0-9a-f-]{36}$/.test(draft.operation)
+    || !/^[0-9a-f]{64}$/.test(draft.hash) || !Number.isSafeInteger(draft.bytes) || draft.bytes < 1 || draft.bytes > 2147483648
     || (draft.uploadId !== undefined && !/^[0-9a-f-]{36}$/.test(draft.uploadId)) || (draft.transferred && !draft.uploadId)
     || !draft.geometry || !Number.isInteger(draft.geometry.width) || !Number.isInteger(draft.geometry.height) || draft.geometry.width < 16 || draft.geometry.height < 16 || draft.geometry.width > 8192 || draft.geometry.height > 8192 || ![0, 90, 180, 270].includes(draft.geometry.rotation) || !Array.isArray(draft.corners) || draft.corners.length > 4 || draft.corners.some(p => !Array.isArray(p) || p.length !== 2 || p.some(n => !Number.isFinite(n)))) throw Error('Saved recording recovery is unreadable. Keep it unchanged and use the original device.')
   return draft

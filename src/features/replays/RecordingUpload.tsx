@@ -57,12 +57,12 @@ export function RecordingUpload({ userId, frame, onPublished }: { userId: string
   async function choose(chosen?: File) {
     if (!chosen) return
     await run('Checking recording', async () => {
-      if (chosen.type && chosen.type !== 'video/mp4' || !/\.mp4$/i.test(chosen.name) || chosen.size < 1 || chosen.size > 262144000) throw Error('Choose an MP4 recording up to 250 MiB. Export MOV recordings as MP4 first.')
+      if (chosen.type && chosen.type !== 'video/mp4' || !/\.mp4$/i.test(chosen.name) || chosen.size < 1 || chosen.size > (import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 2147483648 : 262144000)) throw Error(`Choose an MP4 recording up to ${import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? '2 GiB' : '250 MiB'}. Export MOV recordings as MP4 first.`)
       const g = await inspectRecording(chosen); ensureActive()
       const hash = await hashRecording(chosen, cancel.current!.signal, n => { if (alive.current) setProgress(n) }); ensureActive()
       const fixed = draft?.reservationRequested || draft?.uploadId
       if (draft && fixed && (draft.hash !== hash || draft.bytes !== chosen.size)) throw Error('Select the exact original file for this saved recording. A different file cannot replace it.')
-      const next = (fixed ? draft : null) ?? { version: 1, userId, frameId: frame.id, operation: crypto.randomUUID(), hash, bytes: chosen.size, geometry: g, corners: [] } satisfies RecordingDraft
+      const next = (fixed ? draft : null) ?? { source_provider: import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 'r2' : 'supabase', version: 1, userId, frameId: frame.id, operation: crypto.randomUUID(), hash, bytes: chosen.size, geometry: g, corners: [] } satisfies RecordingDraft
       persist(next)
       if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
       objectUrl.current = URL.createObjectURL(chosen)
@@ -90,7 +90,7 @@ export function RecordingUpload({ userId, frame, onPublished }: { userId: string
     await run('Uploading recording', async () => {
       if (!file || !draft || !geometry || !valid) throw Error('Choose the recording and mark four corners first.')
       let saved = persist({ ...draft, geometry, corners: rawCorners, reservationRequested: true })
-      const reserved = saved.uploadId ? await getRecordingStatus(userId, saved.uploadId) : await reserveRecording(userId, frame.id, saved.operation, file.size)
+      const reserved = saved.uploadId ? await getRecordingStatus(userId, saved.uploadId) : await reserveRecording(userId, frame.id, saved.operation, file.size, saved.hash, saved.source_provider ?? 'supabase')
       ensureActive()
       if (reserved.frame_id !== frame.id || reserved.expected_bytes !== saved.bytes) throw Error('Saved recording does not match this frame.')
       setStatus(reserved); saved = persist({ ...saved, uploadId: reserved.upload_id })
@@ -102,14 +102,14 @@ export function RecordingUpload({ userId, frame, onPublished }: { userId: string
         persist({ ...saved, transferred: true })
       }
       setBusy('Confirming recording')
-      const uploaded = await finalizeRecording(userId, reserved.upload_id); ensureActive(); setStatus(uploaded)
+      const uploaded = await finalizeRecording(userId, reserved.upload_id, reserved.source_provider); ensureActive(); setStatus(uploaded)
     })
   }
   async function confirmUpload() {
     await run('Confirming recording', async () => {
       if (!draft?.uploadId) return
       persist(draft)
-      const next = await finalizeRecording(userId, draft.uploadId); ensureActive()
+      const next = await finalizeRecording(userId, draft.uploadId, status?.source_provider); ensureActive()
       persist({ ...draft, transferred: true }); setStatus(next)
     })
   }
@@ -123,7 +123,7 @@ export function RecordingUpload({ userId, frame, onPublished }: { userId: string
   async function check() {
     await run('Checking recording', async () => {
       if (!draft) return
-      const next = draft.uploadId ? await getRecordingStatus(userId, draft.uploadId) : await reserveRecording(userId, frame.id, draft.operation, draft.bytes)
+      const next = draft.uploadId ? await getRecordingStatus(userId, draft.uploadId) : await reserveRecording(userId, frame.id, draft.operation, draft.bytes, draft.hash, draft.source_provider ?? 'supabase')
       ensureActive(); persist({ ...draft, uploadId: next.upload_id }); setStatus(next)
       if (next.processing_status === 'completed') onPublished()
     })

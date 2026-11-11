@@ -18,7 +18,7 @@ export interface SessionRow {
   created_at: string; initial_breaker_id: UUID | null
 }
 export interface ReplayUploadStatus {
- upload_id: UUID; frame_id: UUID; session_id: UUID; storage_path: string; bucket: 'frame-recordings'
+ upload_id: UUID; frame_id: UUID; session_id: UUID; storage_path: string; bucket: 'frame-recordings' | 'pule-frame-recordings'; source_provider?: 'supabase' | 'r2'
  status: 'reserved' | 'committed' | 'cleanup' | 'cleaned'; expected_bytes: number; content_type: 'video/mp4'; expires_at: string
  processing_status?: 'uploaded' | 'queued' | 'processing' | 'completed' | 'failed' | null
  retain_until?: string | null; attempts?: number | null; failure_code?: string | null

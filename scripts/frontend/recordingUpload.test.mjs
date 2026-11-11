@@ -68,7 +68,7 @@ test('unavailable storage and malformed recovery block rather than discard',()=>
 
 let service=await source('data/remote/recordingService.ts')
 service=service.replace(/^import .*$/gm,'').replace('import.meta.env.VITE_SUPABASE_URL',"'https://test.supabase.co'")
-const prelude=`const actorAuthorization=async uid=>{if(uid!==globalThis.s.actor)throw Error('Wrong actor');return 'Bearer caller'};
+const prelude=`const r2RecordingEnabled=()=>false;const actorAuthorization=async uid=>{if(uid!==globalThis.s.actor)throw Error('Wrong actor');return 'Bearer caller'};
 const getSupabase=()=>({auth:{onAuthStateChange:callback=>{globalThis.s.authChange=callback;return {data:{subscription:{unsubscribe(){}}}}}},rpc:(name,args)=>{globalThis.s.calls.push({name,args});const q={setHeader:(key,value)=>{globalThis.s.header={key,value};return q},retry:value=>{globalThis.s.retry=value;return q},abortSignal:async()=>({data:globalThis.s.response,error:globalThis.s.error})};return q}});
 class Upload{constructor(file,options){this.options=options;globalThis.s.upload=this}async findPreviousUploads(){return []}start(){globalThis.s.started=true}async abort(){globalThis.s.aborted=true}};`
 const api=await import(compile(prelude+service))
@@ -94,7 +94,7 @@ test('TUS is exact-path, six-MiB, non-upsert and explicit-resume only; pause/acc
 const {recordingLabel}=await import(compile((await source('features/replays/recordingPresentation.ts')).replace(/^import .*$/gm,'')))
 globalThis.recordingLabel=recordingLabel
 let ui=await source('features/replays/RecordingUpload.tsx')
-ui=ui.replace(/^import .*$/gm,'').replaceAll('import.meta.env.VITE_SUPABASE_URL',"'https://test.supabase.co'")
+ui=ui.replaceAll('import.meta.env.VITE_RECORDING_UPLOAD_API_URL','undefined').replace(/^import .*$/gm,'').replaceAll('import.meta.env.VITE_SUPABASE_URL',"'https://test.supabase.co'")
 globalThis.geometry=geometry
 const uiPrelude=`const navigator={locks:{request:async(key,options,fn)=>fn({})}};const clearRecording=()=>{};const recordingLabel=globalThis.recordingLabel;const {displaySize,displayToSource,pointerToDisplay,sourceToDisplay,validCorners}=globalThis.geometry;
 const React={createElement:(type,props,...children)=>{if(props?.ref&&type==='video')props.ref.current={...displaySize(globalThis.h.g),videoWidth:displaySize(globalThis.h.g).width,videoHeight:displaySize(globalThis.h.g).height,duration:100,pause(){}};if(props?.ref&&type==='canvas')props.ref.current={getContext:()=>({drawImage(){}})};return {type,props:props??{},children}},Fragment:'fragment'};

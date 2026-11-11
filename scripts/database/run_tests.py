@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sql-test', choices=['frame_replay_processing.sql','frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
+    parser.add_argument('--sql-test', choices=['r2_frame_recordings.sql','frame_replay_processing.sql','frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
     parser.add_argument('--atomic-replay-release', action='store_true', help='Apply the generated atomic replay release bundle locally')
     parser.add_argument('--port', type=int, default=55439)
     parser.add_argument('--upgrade-foundation', action='store_true', help='Seed original two migrations, then upgrade existing synthetic history')
@@ -43,11 +43,12 @@ def main():
         file(ROOT/'supabase/tests/bootstrap_postgres.sql')
         file(ROOT/'supabase/tests/storage_bootstrap.sql')
         fixtures_loaded = False
+        legacy_r2_snapshot = None
         for index, path in enumerate(sorted((ROOT/'supabase/migrations').glob('*.sql')), start=1):
             if path.name == '202611040003_automatic_matchups.sql':
                 file(ROOT/'supabase/tests/matchup_binding_fixture.sql')
             # Preserve the 2A checkpoint suite; Stage 1 intentionally replaces its direct-publication contract.
-            if path.name in ('202611100003_frame_replay_processing.sql','202611100004_replay_cleanup_accounting.sql') and args.sql_test == 'frame_replay_uploads.sql':
+            if path.name in ('202611100003_frame_replay_processing.sql','202611100004_replay_cleanup_accounting.sql','202611110001_r2_frame_recordings.sql') and args.sql_test == 'frame_replay_uploads.sql':
                 continue
             if args.atomic_replay_release and path.name == '202611100002_frame_replay_uploads.sql':
                 # Prove a later prerequisite failure rolls back even the temporary
@@ -66,7 +67,15 @@ def main():
                 continue
             if args.atomic_replay_release and path.name in ('202611100003_frame_replay_processing.sql','202611100004_replay_cleanup_accounting.sql'):
                 continue
+            if path.name == '202611110001_r2_frame_recordings.sql' and args.sql_test == 'r2_frame_recordings.sql':
+                # A valid pre-migration legacy ledger row must not be rewritten or reclassified.
+                sql("insert into private.frame_replay_uploads(id,actor_id,operation_id,group_id,session_id,frame_id,expected_bytes,content_type,storage_path,status) values('eeeeeeee-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000002','eeeeeeee-0000-0000-0000-000000000003','eeeeeeee-0000-0000-0000-000000000004','eeeeeeee-0000-0000-0000-000000000005','eeeeeeee-0000-0000-0000-000000000006',100,'video/mp4','eeeeeeee-0000-0000-0000-000000000005/eeeeeeee-0000-0000-0000-000000000006/eeeeeeee-0000-0000-0000-000000000001.mp4','cleaned')")
+                legacy_r2_snapshot = json.loads(sql("select to_jsonb(u) from private.frame_replay_uploads u where id='eeeeeeee-0000-0000-0000-000000000001'"))
             file(path)
+            if path.name == '202611110001_r2_frame_recordings.sql' and legacy_r2_snapshot is not None:
+                after = json.loads(sql("select to_jsonb(u)-array['source_provider','source_sha256','r2_multipart_id','r2_etag'] from private.frame_replay_uploads u where id='eeeeeeee-0000-0000-0000-000000000001'"))
+                assert after == legacy_r2_snapshot
+                assert sql("select source_provider='supabase' and source_sha256 is null and r2_multipart_id is null and r2_etag is null from private.frame_replay_uploads where id='eeeeeeee-0000-0000-0000-000000000001'") == 't'
             if args.upgrade_foundation and index == 2:
                 file(ROOT/'supabase/tests/fixtures.sql')
                 fixtures_loaded = True
@@ -75,6 +84,25 @@ def main():
             file(ROOT/'supabase/tests/fixtures.sql')
         if args.sql_test:
             file(ROOT/'supabase/tests'/args.sql_test)
+            if args.sql_test == 'r2_frame_recordings.sql':
+                sql("select test.ok(true,'existing pre-R2 reservation identity and every original field preserved')")
+                def r2_claim(_):
+                    return json.loads(sql("set role service_role; select coalesce(app.claim_r2_frame_replay_processing(),'null'::jsonb)").splitlines()[-1])
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    claims = list(pool.map(r2_claim, range(2)))
+                assert sum(x is not None for x in claims) == 1
+                sql("select test.ok(true,'independent R2 workers claim one job')")
+                def r2_reserve(actor):
+                    try:
+                        sql("set role authenticated; set request.jwt.claim.sub='20000000-0000-0000-0000-00000000000%d'; select app.reserve_r2_frame_recording(gen_random_uuid(),(select frame_id from test.upload_cases where n=5),100,repeat('a',64))" % actor)
+                        return True
+                    except subprocess.CalledProcessError as error:
+                        assert 'frame_upload_reserved' in error.stderr
+                        return False
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    reserved = list(pool.map(r2_reserve, (1, 2)))
+                assert sum(reserved) == 1
+                sql("select test.ok(true,'competing authorized actors cannot reserve the same R2 frame')")
             if args.sql_test == 'frame_replay_processing.sql':
                 service = "set role service_role;"
                 owner = "set role authenticated; set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';"

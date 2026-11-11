@@ -22,6 +22,7 @@ from urllib.parse import urlparse, quote
 
 import cv2
 import numpy as np
+from r2_source import R2Source, MAX_SOURCE_BYTES
 
 MAX_BYTES = 262144000
 UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
@@ -99,9 +100,14 @@ class SupabaseAPI:
 
 
 def validate_job(job):
+    r2 = job.get('source_provider', 'supabase') == 'r2'
+    if job.get('source_provider', 'supabase') not in ('supabase', 'r2'):
+        raise ValueError('Invalid source provider')
+    if r2 and (not re.fullmatch(r'[a-f0-9]{64}', str(job.get('source_sha256', ''))) or not isinstance(job.get('source_etag'), str) or not 1 <= len(job['source_etag']) <= 128):
+        raise ValueError('Invalid R2 source evidence')
     if (not re.fullmatch(UUID, str(job.get('job_id', '')))
             or not re.fullmatch(UUID, str(job.get('lease_id', '')))
-            or job.get('source_bucket') != 'frame-recordings' or job.get('destination_bucket') != 'frame-replays'
+            or job.get('source_bucket') != ('pule-frame-recordings' if r2 else 'frame-recordings') or job.get('destination_bucket') != 'frame-replays'
             or not KEY_RE.fullmatch(str(job.get('source_key', '')))
             or not KEY_RE.fullmatch(str(job.get('destination_key', '')))):
         raise ValueError('Invalid trusted job identity')
@@ -109,7 +115,7 @@ def validate_job(job):
             or job['source_key'].rsplit('/', 1)[1] != job['job_id'] + '.mp4'
             or job['destination_key'].rsplit('/', 1)[1] != job['lease_id'] + '.mp4'):
         raise ValueError('Job paths do not match the lease')
-    if type(job.get('expected_bytes')) is not int or not 1 <= job['expected_bytes'] <= MAX_BYTES:
+    if type(job.get('expected_bytes')) is not int or not 1 <= job['expected_bytes'] <= (MAX_SOURCE_BYTES if r2 else MAX_BYTES):
         raise ValueError('Invalid source size')
 
 
@@ -202,8 +208,10 @@ def verify_video(path):
     return {'duration_seconds': duration, 'size_bytes': size}
 
 
-def run_once(api, processor=process_recording):
-    job = api.rpc('claim_frame_replay_processing', {})
+def run_once(api, processor=process_recording, r2=None):
+    job = api.rpc('claim_r2_frame_replay_processing', {}) if r2 is not None else None
+    if job is None:
+        job = api.rpc('claim_frame_replay_processing', {})
     if job is None:
         return {'status': 'idle'}
     # Validate before any Storage request; malformed trusted jobs lose their lease.
@@ -213,7 +221,12 @@ def run_once(api, processor=process_recording):
         with tempfile.TemporaryDirectory(prefix='pule-replay-') as tmp:
             work = Path(tmp)
             source = work / 'source.mp4'
-            api.download(job['source_key'], source, job['expected_bytes'])
+            if job.get('source_provider') == 'r2':
+                if r2 is None:
+                    raise ValueError('R2 source reader required')
+                r2.download(job, source)
+            else:
+                api.download(job['source_key'], source, job['expected_bytes'])
             output, result = processor(source, job, work)
             # Recheck the artifact immediately before trusted upload/publication.
             actual = verify_video(output)
@@ -252,7 +265,8 @@ def main():
         if args.check:
             print(json.dumps({'status': 'toolchain_ready'}))
             return
-        result = run_once(SupabaseAPI(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_ROLE_KEY']))
+        r2 = R2Source() if os.environ.get('R2_ACCOUNT_ID') else None
+        result = run_once(SupabaseAPI(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_ROLE_KEY']), r2=r2)
         print(json.dumps(result))
         if result['status'] in ('failed', 'unconfirmed'):
             raise SystemExit(1)
