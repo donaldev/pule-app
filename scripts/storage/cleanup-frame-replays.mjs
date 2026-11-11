@@ -9,16 +9,16 @@ export async function runReplayCleanup(client, limit = 20) {
   for (const item of data) {
     // SQL assigns paths; still fail closed before using powerful worker credentials.
     const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-    if (item.bucket !== 'frame-replays' || !new RegExp(`^${uuid}/${uuid}(?:/${uuid})?\\.mp4$`).test(item.storage_path)
+    if (!['frame-replays', 'frame-recordings'].includes(item.bucket) || !new RegExp(`^${uuid}/${uuid}(?:/${uuid})?\\.mp4$`).test(item.storage_path)
       || !new RegExp(`^${uuid}$`).test(item.lease_id)) throw new Error('Invalid replay cleanup lease.')
     let success = false
     try {
-      const result = await client.storage.from('frame-replays').remove([item.storage_path])
+      const result = await client.storage.from(item.bucket).remove([item.storage_path])
       success = !result.error
     } catch { /* Leave durable retry work; no metadata is discarded. */ }
     try {
       const ack = await client.rpc('finish_frame_replay_cleanup', {
-        p_path: item.storage_path, p_lease: item.lease_id, p_success: success,
+        p_bucket: item.bucket, p_path: item.storage_path, p_lease: item.lease_id, p_success: success,
       })
       if (ack.error || !success) counts.failed++
       else counts.completed++

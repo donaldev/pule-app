@@ -19,3 +19,18 @@ test('lost acknowledgment leaves recovery to lease expiry',async()=>{
 test('invalid queue paths fail closed before any Storage request',async()=>{
  const client=mock({bad:true});await assert.rejects(runReplayCleanup(client),/Invalid/);assert.equal(client.calls.length,1)
 })
+
+test('worker handles source cleanup only from a bucket-qualified lease',async()=>{
+ const client=mock();const original=client.rpc;client.rpc=async(name,args)=>{
+  const result=await original(name,args)
+  return name==='claim_frame_replay_cleanup'?{data:[{...lease,bucket:'frame-recordings'}]}:result
+ }
+ assert.equal((await runReplayCleanup(client)).completed,1)
+ assert.deepEqual(client.calls[1],['remove','frame-recordings',[path]])
+ assert.equal(client.calls[2][1].p_bucket,'frame-recordings')
+})
+test('worker refuses unexpected buckets before using credentials',async()=>{
+ const client=mock();client.rpc=async()=>({data:[{...lease,bucket:'other-bucket'}]})
+ await assert.rejects(runReplayCleanup(client),/Invalid/)
+ assert.equal(client.calls.length,0)
+})

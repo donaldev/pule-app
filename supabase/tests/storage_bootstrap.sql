@@ -9,4 +9,4 @@ create table storage.objects(id uuid primary key default gen_random_uuid(),bucke
 alter table storage.objects enable row level security;
 grant usage on schema storage to anon,authenticated;
 grant select,insert,update,delete on storage.objects to anon,authenticated;
-insert into storage.buckets(id) values('frame-replays'),('unrelated');
+insert into storage.buckets(id) values('frame-replays'),('frame-recordings'),('unrelated');

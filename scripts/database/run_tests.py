@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sql-test', choices=['frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
+    parser.add_argument('--sql-test', choices=['frame_replay_processing.sql','frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
     parser.add_argument('--port', type=int, default=55439)
     parser.add_argument('--upgrade-foundation', action='store_true', help='Seed original two migrations, then upgrade existing synthetic history')
     args = parser.parse_args()
@@ -42,6 +42,9 @@ def main():
         for index, path in enumerate(sorted((ROOT/'supabase/migrations').glob('*.sql')), start=1):
             if path.name == '202611040003_automatic_matchups.sql':
                 file(ROOT/'supabase/tests/matchup_binding_fixture.sql')
+            # Preserve the 2A checkpoint suite; Stage 1 intentionally replaces its direct-publication contract.
+            if path.name == '202611100003_frame_replay_processing.sql' and args.sql_test == 'frame_replay_uploads.sql':
+                continue
             file(path)
             if args.upgrade_foundation and index == 2:
                 file(ROOT/'supabase/tests/fixtures.sql')
@@ -51,6 +54,47 @@ def main():
             file(ROOT/'supabase/tests/fixtures.sql')
         if args.sql_test:
             file(ROOT/'supabase/tests'/args.sql_test)
+            if args.sql_test == 'frame_replay_processing.sql':
+                service = "set role service_role;"
+                owner = "set role authenticated; set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';"
+                def claim_one(_):
+                    return json.loads(sql(service + "select coalesce(app.claim_frame_replay_processing(),'null'::jsonb)").splitlines()[-1])
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    claims = list(pool.map(claim_one, range(2)))
+                assert sum(item is not None for item in claims) == 1
+                job = next(item for item in claims if item is not None)
+                sql("select test.ok(true,'independent worker claims lease exactly one job')")
+                def put_output(job):
+                    sql("insert into storage.objects(bucket_id,name,metadata) values('frame-replays','%s','{\"size\":70,\"mimetype\":\"video/mp4\"}')" % job['destination_key'])
+                put_output(job)
+                def publish_one(_):
+                    return json.loads(sql(service + "select app.complete_frame_replay_processing('%s','%s',70,5,1)" % (job['job_id'], job['lease_id'])).splitlines()[-1])
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    published = list(pool.map(publish_one, range(2)))
+                assert published[0] == published[1]
+                sql("select test.ok((select count(*)=1 from app.frame_replays where storage_path='%s'),'independent publication retries register one output')" % job['destination_key'])
+                fid = sql('select frame_id from test.upload_cases where n=5')
+                sid = sql('select session_id from test.upload_cases where n=5')
+                upload = json.loads(sql(owner + "select app.reserve_frame_replay_upload(gen_random_uuid(),'%s',100)" % fid).splitlines()[-1])
+                sql("insert into storage.objects(bucket_id,name,owner_id,metadata) values('frame-recordings','%s','20000000-0000-0000-0000-000000000001','{\"size\":100,\"mimetype\":\"video/mp4\"}')" % upload['storage_path'])
+                sql(owner + "select app.finalize_frame_replay_upload('%s')" % upload['upload_id'])
+                sql(owner + "select app.queue_frame_replay_processing('%s','[[20,20],[620,20],[620,460],[20,460]]',640,480)" % upload['upload_id'])
+                raced = claim_one(0)
+                put_output(raced)
+                def race_publish():
+                    try:
+                        sql(service + "select app.complete_frame_replay_processing('%s','%s',70,5,1)" % (raced['job_id'], raced['lease_id']))
+                    except subprocess.CalledProcessError as error:
+                        if 'processing_lease_invalid' not in error.stderr:
+                            raise
+                def race_remove():
+                    sql(owner + "select app.remove_match(gen_random_uuid(),'%s',12,'abandon')" % sid)
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    jobs = [pool.submit(race_publish), pool.submit(race_remove)]
+                    for future in jobs:
+                        future.result()
+                sql("select test.ok(not exists(select 1 from app.frame_replays where frame_id='%s') and exists(select 1 from private.frame_replay_cleanup where bucket_id='frame-replays' and storage_path='%s'),'publication racing removal cannot resurrect match or lose output cleanup')" % (fid, raced['destination_key']))
+                sql("select test.ok(exists(select 1 from app.frame_replays where frame_id='90000000-0000-0000-0000-000000000001'),'unrelated historical replay survives processing/removal races')")
             if args.sql_test == 'frame_replay_uploads.sql':
                 owner = "set role authenticated; set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';"
                 opponent = "set role authenticated; set request.jwt.claim.sub='20000000-0000-0000-0000-000000000002';"

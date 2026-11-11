@@ -1,5 +1,11 @@
 # Frame Replays Phase 2A — local backend
 
+**Superseded for source uploads by Stage 1:** apply the follow-up processing
+migration and use [replay-worker/README.md](../replay-worker/README.md). Uploaded
+recordings are now private sources, not directly publishable replays. This document
+retains the 2A checkpoint contract; its finalization/cleanup signatures must not be
+used as the Stage 1 deployment instructions.
+
 New migration: `supabase/migrations/202611100002_frame_replay_uploads.sql`, after
 Phase 1. Previously deployed migrations and existing replay rows remain unchanged.
 No upload UI, production migration, worker scheduling or hosted Storage call is
