@@ -59,7 +59,14 @@ export function recordingR2(env, transport = fetch) {
       const d = xml(await text(await request('GET', key, { uploadId: id, 'max-parts': 1000 }))).ListPartsResult
       if (!d || String(d.IsTruncated) === 'true') throw Error('Invalid multipart response')
       return (d.Part ?? []).map(p => {
-        if (!Number.isSafeInteger(Number(p.PartNumber)) || !Number.isSafeInteger(Number(p.Size)) || !/^"?[a-f0-9]{32}"?$/.test(p.ETag)) throw Error('Invalid uploaded part')
+        if (
+          !Number.isSafeInteger(Number(p.PartNumber)) ||
+          Number(p.PartNumber) < 1 ||
+          !Number.isSafeInteger(Number(p.Size)) ||
+          Number(p.Size) <= 0 ||
+          typeof p.ETag !== 'string' ||
+          !/^"?[a-fA-F0-9]{32}"?$/.test(p.ETag.trim())
+        ) throw Error('Invalid uploaded part')
         return { number: Number(p.PartNumber), bytes: Number(p.Size), etag: p.ETag }
       })
     },
