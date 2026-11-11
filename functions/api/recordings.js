@@ -77,10 +77,16 @@ export function recordingHandler(makeClient = createClient, makeR2 = recordingR2
       if (!verify(verified)) throw Error('Completed object could not be verified')
       const status = await rpc(service, 'confirm_r2_frame_recording', { p_upload: u.upload_id, p_actor: user.user.id, p_bytes: verified.bytes, p_type: verified.type, p_sha256: verified.sha256, p_etag: verified.etag })
       return response(status)
-    } catch {
-      // Never log tokens, signed URLs, storage response bodies or recording contents.
-      return response({ error: 'Recording request could not be confirmed. Keep the same file and check status before retrying.' }, 409)
-    }
+    } catch (error) {
+        console.error('Recording API failure', {
+          type: error instanceof Error ? error.name : 'Unknown',
+          message: error instanceof Error ? error.message : 'Unknown failure'
+        })
+
+        return response({
+          error: 'Recording request could not be confirmed. Keep the same file and check status before retrying.'
+        }, 409)
+      }
   }
 }
 export const onRequest = recordingHandler()
