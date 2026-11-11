@@ -920,3 +920,10 @@
  .connected-app .topbar { padding-top:env(safe-area-inset-top); height:calc(66px + env(safe-area-inset-top)); min-height:calc(66px + env(safe-area-inset-top)); }
  .connected-app:has(.gameplay-page) .topbar { height:calc(58px + env(safe-area-inset-top)); min-height:calc(58px + env(safe-area-inset-top)); }
 }
+
+/* Private frame replay, using the existing dismissible dialog. */
+.modal:has(.replay-player) { background:var(--surface); color:var(--text); border-color:var(--brass); width:min(720px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow-y:auto; }
+.modal:has(.replay-player) h2, .modal:has(.replay-player) .icon-button { color:var(--text); }
+.replay-player video { display:block; width:100%; max-height:65dvh; background:#0B0E0C; border-radius:var(--radius-card); }
+.replay-player p { margin:16px 0; }
+.watch-replay { min-height:44px; }

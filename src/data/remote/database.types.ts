@@ -17,6 +17,7 @@ export interface SessionRow {
   revision: number; import_batch_id: UUID | null; legacy_match_id: string | null
   created_at: string; initial_breaker_id: UUID | null
 }
+export interface FrameReplay { frame_id: UUID; group_id: UUID; session_id: UUID; storage_path: string; created_at: string }
 export interface FrameParticipant { player_id: UUID; side: 1 | 2; foul_count: number | null }
 export interface SavedFrame {
   id: UUID; group_id: UUID; session_id: UUID; frame_number: number
@@ -44,6 +45,7 @@ type Command<Extra> = { p_operation: UUID; p_session: UUID; p_expected_revision:
 export interface Database {
   app: {
     Tables: {
+      frame_replays: ReadTable<FrameReplay>
       match_sessions: ReadTable<SessionRow>
       groups: ReadTable<{ id: UUID; name: string; timezone: string; status: 'active' | 'archived'; created_at: string }>
       group_players: ReadTable<{ group_id: UUID; player_id: UUID; display_name: string; status: 'active' | 'archived' }>

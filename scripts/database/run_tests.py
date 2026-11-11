@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sql-test', choices=['automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
+    parser.add_argument('--sql-test', choices=['frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
     parser.add_argument('--port', type=int, default=55439)
     parser.add_argument('--upgrade-foundation', action='store_true', help='Seed original two migrations, then upgrade existing synthetic history')
     args = parser.parse_args()
@@ -37,6 +37,7 @@ def main():
     run('createdb', name)
     try:
         file(ROOT/'supabase/tests/bootstrap_postgres.sql')
+        file(ROOT/'supabase/tests/storage_bootstrap.sql')
         fixtures_loaded = False
         for index, path in enumerate(sorted((ROOT/'supabase/migrations').glob('*.sql')), start=1):
             if path.name == '202611040003_automatic_matchups.sql':
@@ -79,6 +80,7 @@ def main():
                 sql("select test.ok((select winner_id='30000000-0000-0000-0000-000000000002' from app.frames where id='%s'),'rejected corrections leave frame unchanged')" % case['frame'])
             print(json.dumps({'focused_sql_test':args.sql_test,'assertions_passed':int(sql('select count(*) from test.results')),'synthetic_only':True}))
             return
+        file(ROOT/'supabase/tests/frame_replays.sql')
         file(ROOT/'supabase/tests/scoring.sql')
         file(ROOT/'supabase/tests/multiplayer.sql')
         file(ROOT/'supabase/tests/receipt_lookup.sql')

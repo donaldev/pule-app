@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {readFile} from 'node:fs/promises'
 import ts from 'typescript'
 let values=[],cursor=0
-const React={createElement:(type,props,...children)=>typeof type==='function'&&['MatchDisclosureHeading','DisclosureHeading'].includes(type.name)?type({...props,children:children.flat(Infinity)}):({type,props:props??{},children:children.flat(Infinity)}),Fragment:'fragment'}
+const React={createElement:(type,props,...children)=>typeof type==='function'&&['MatchDisclosureHeading','DisclosureHeading','FrameReplays'].includes(type.name)?type({...props,children:children.flat(Infinity)}):({type,props:props??{},children:children.flat(Infinity)}),Fragment:'fragment'}
 const Modal=()=>null
 const state=initial=>{const i=cursor++;if(!(i in values))values[i]=typeof initial==='function'?initial():initial;return [values[i],next=>{values[i]=typeof next==='function'?next(values[i]):next}]}
 globalThis.__removalUi={React,Modal,useState:state,useEffect(){},useRef:v=>({current:v}),PageHeading:()=>null,Eyebrow:()=>null,displayDate:v=>v??'Unknown date'}
@@ -11,7 +11,7 @@ const headingSource=(await readFile(new URL('../../src/components/ui/DisclosureH
 const headingCode=ts.transpileModule('const {React}=globalThis.__removalUi;'+headingSource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.React}}).outputText
 globalThis.__removalUi.MatchDisclosureHeading=(await import('data:text/javascript;base64,'+Buffer.from(headingCode).toString('base64'))).DisclosureHeading
 const source=(await readFile(new URL('../../src/features/connected/SessionView.tsx',import.meta.url),'utf8')).replace(/^import .*$/gm,'')
-const code=ts.transpileModule('const {React,Modal,useState,useEffect,useRef,PageHeading,Eyebrow,displayDate,MatchDisclosureHeading}=globalThis.__removalUi;const MatchMomentumSection=()=>null;\n'+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.React}}).outputText
+const code=ts.transpileModule('const {React,Modal,useState,useEffect,useRef,PageHeading,Eyebrow,displayDate,MatchDisclosureHeading}=globalThis.__removalUi;const MatchMomentumSection=()=>null;const FrameReplays=({children})=>children[0](()=>null);\n'+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.React}}).outputText
 const {SessionView}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'))
 const nodes=n=>n&&typeof n==='object'?[n,...n.children.flatMap(nodes)]:[]
 const find=(tree,fn)=>nodes(tree).find(fn)
@@ -50,6 +50,7 @@ test('history exposes every completed frame through Edit, with no duplicate last
  const {game,render}=fixture();game.inputBlocked=false
  game.state.frames=[1,2,3].map(n=>({id:'f'+n,frame_number:n,status:'completed',winner_id:'a',elapsed_ms:n*60000,participants:[]}))
  let tree=render()
+ find(tree,n=>n.props['aria-controls']==='session-frame-history').props.onClick();tree=render()
  assert.equal(find(tree,n=>n.children.includes('Edit last frame')),undefined)
  assert.equal(find(tree,n=>n.children.includes('Tonight’s standings')),undefined)
  for(const n of [1,2,3]){
