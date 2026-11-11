@@ -5,7 +5,7 @@ export const R2_BUCKET = 'pule-frame-recordings'
 export const PART_BYTES = 16 * 1024 * 1024
 export const MAX_SOURCE_BYTES = 2 * 1024 * 1024 * 1024
 export const SOURCE_KEY = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.mp4$/
-const parser = new XMLParser({ processEntities: false, parseTagValue: false, isArray: name => name === 'Part' })
+const parser = new XMLParser({ processEntities: true, parseTagValue: false, isArray: name => name === 'Part' })
 const xml = text => {
   if (text.length > 1048576 || /<!DOCTYPE|<!ENTITY/i.test(text) || XMLValidator.validate(text) !== true) throw Error('Invalid storage response')
   return parser.parse(text)
