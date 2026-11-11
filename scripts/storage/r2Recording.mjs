@@ -58,17 +58,33 @@ export function recordingR2(env, transport = fetch) {
     async parts(key, id) {
       const d = xml(await text(await request('GET', key, { uploadId: id, 'max-parts': 1000 }))).ListPartsResult
       if (!d || String(d.IsTruncated) === 'true') throw Error('Invalid multipart response')
-      return (d.Part ?? []).map(p => {
-        if (
-          !Number.isSafeInteger(Number(p.PartNumber)) ||
-          Number(p.PartNumber) < 1 ||
-          !Number.isSafeInteger(Number(p.Size)) ||
-          Number(p.Size) <= 0 ||
-          typeof p.ETag !== 'string' ||
-          !/^"?[a-fA-F0-9]{32}"?$/.test(p.ETag.trim())
-        ) throw Error('Invalid uploaded part')
-        return { number: Number(p.PartNumber), bytes: Number(p.Size), etag: p.ETag }
-      })
+        return (d.Part ?? []).map(p => {
+          if (
+            !Number.isSafeInteger(Number(p.PartNumber)) ||
+            Number(p.PartNumber) < 1 ||
+            !Number.isSafeInteger(Number(p.Size)) ||
+            Number(p.Size) <= 0 ||
+            typeof p.ETag !== 'string' ||
+            !/^"?[a-fA-F0-9]{32}"?$/.test(p.ETag.trim())
+          ) {
+            console.error('Invalid R2 part fields', {
+              partNumber: p.PartNumber,
+              size: p.Size,
+              etagType: typeof p.ETag,
+              etagLength: typeof p.ETag === 'string' ? p.ETag.length : null,
+              etagMatches: typeof p.ETag === 'string'
+                ? /^"?[a-fA-F0-9]{32}"?$/.test(p.ETag.trim())
+                : false
+            })
+            throw Error('Invalid uploaded part')
+          }
+
+          return {
+            number: Number(p.PartNumber),
+            bytes: Number(p.Size),
+            etag: p.ETag
+          }
+        })
     },
     async signPart(key, id, number, bytes) {
       const signed = await aws.sign(url(key, { uploadId: id, partNumber: number, 'X-Amz-Expires': 120 }), {
