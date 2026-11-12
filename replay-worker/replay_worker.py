@@ -59,7 +59,7 @@ class SupabaseAPI:
             raise
 
     def rpc(self, name, args):
-        if not re.fullmatch(r'[a-z_]+', name):
+        if not re.fullmatch(r'[a-z][a-z0-9_]*', name):
             raise ValueError('Invalid RPC name')
         body = json.dumps(args).encode()
         conn, response = self._request('POST', '/rest/v1/rpc/' + name, body, 'application/json', len(body))
