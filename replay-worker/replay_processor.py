@@ -12,6 +12,7 @@ import numpy as np
 
 # Preserve the proven prototype's default detector settings.
 ANALYSIS_WIDTH = 1440
+MAX_ANALYSIS_HEIGHT = 4096
 SAMPLE_FPS = 15
 MIN_BLOB_AREA = 8
 MAX_BLOB_AREA = 1200
@@ -22,6 +23,19 @@ MIN_ACTIVE_SECONDS = 0.13
 SETTLE_SECONDS = 0.60
 LEAD_IN = 2.0
 TAIL = 0.5
+
+
+def analysis_crop(corners, width, height):
+    x, y, w, h = cv2.boundingRect(corners.astype(np.int32))
+    x, y = max(0, x - 40), max(0, y - 40)
+    w, h = min(width - x, w + 80), min(height - y, h + 80)
+    if w <= 0 or h <= 0:
+        raise ValueError('Table corners are outside video bounds')
+    analysis_width = min(ANALYSIS_WIDTH, MAX_ANALYSIS_HEIGHT * w // h)
+    if analysis_width < 1:
+        raise ValueError('Table crop cannot fit within analysis limits')
+    analysis_height = max(1, round(h * (analysis_width / w)))
+    return x, y, w, h, analysis_width, analysis_height
 
 
 def select_clips(times: np.ndarray, scores: np.ndarray, duration: float) -> list[tuple[float, float]]:
@@ -77,18 +91,10 @@ def detect_clips(video: Path, corners_file: Path) -> tuple[list[tuple[float, flo
         corners = np.load(corners_file, allow_pickle=False).astype(np.float32)
         if corners.shape != (4, 2) or not np.isfinite(corners).all():
             raise ValueError('Table corners must be a finite (4, 2) array')
-        x, y, w, h = cv2.boundingRect(corners.astype(np.int32))
-        margin = 40
-        x = max(0, x - margin)
-        y = max(0, y - margin)
-        w = min(width - x, w + 2 * margin)
-        h = min(height - y, h + 2 * margin)
-        if w <= 0 or h <= 0:
-            raise ValueError('Table corners are outside video bounds')
-        scale = ANALYSIS_WIDTH / w
-        new_height = max(1, round(h * scale))
+        x, y, w, h, analysis_width, new_height = analysis_crop(corners, width, height)
+        scale = analysis_width / w
         polygon = ((corners - [x, y]) * scale).astype(np.int32)
-        mask = np.zeros((new_height, ANALYSIS_WIDTH), dtype=np.uint8)
+        mask = np.zeros((new_height, analysis_width), dtype=np.uint8)
         cv2.fillPoly(mask, [polygon], 255)
         mask = cv2.erode(mask, np.ones((13, 13), np.uint8))
         if not np.any(mask):
@@ -106,7 +112,7 @@ def detect_clips(video: Path, corners_file: Path) -> tuple[list[tuple[float, flo
                 continue
             t = frame_index / fps
             crop = frame[y:y+h, x:x+w]
-            resized = cv2.resize(crop, (ANALYSIS_WIDTH, new_height))
+            resized = cv2.resize(crop, (analysis_width, new_height))
             gray = cv2.GaussianBlur(cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY), (5, 5), 0)
             score = 0
             if previous is not None:

@@ -115,7 +115,7 @@ export function RecordingUpload({ userId, frame, onPublished }: { userId: string
   }
   async function createReplay() {
     await run('Queueing replay', async () => {
-      if (!draft?.uploadId || !geometry || !valid) throw Error('Reopen the original file and mark four valid corners.')
+      if (!draft?.uploadId || !geometry || !valid) throw Error('These table corners cannot be processed. Reopen the original file and select four distinct corners inside the video, without crossing edges.')
       const saved = persist({ ...draft, geometry, corners: rawCorners })
       const next = await queueRecording(userId, draft.uploadId, saved.corners, geometry.width, geometry.height); ensureActive(); setStatus(next)
     })
@@ -146,7 +146,7 @@ export function RecordingUpload({ userId, frame, onPublished }: { userId: string
             setPoints(p => [...p, pointerToDisplay(e.clientX, e.clientY, rect, geometry)])
           }}><polygon points={points.map(p => p.join(',')).join(' ')} />{points.map((p, i) => <g key={i}><circle cx={p[0]} cy={p[1]} r={displaySize(geometry).width / 35} /><text x={p[0]} y={p[1]} fontSize={displaySize(geometry).width / 28} textAnchor="middle" dominantBaseline="central">{i + 1}</text></g>)}</svg>}
         </div>
-        {marked && <><p>{points.length} of 4 corners selected.{points.length === 4 && !valid && ' Select four distinct corners around the table, without crossing edges.'}</p><div className="connected-actions"><button type="button" className="text-button" disabled={!!busy || points.length >= 4} onClick={() => { if (geometry) setPoints(p => [...p, [displaySize(geometry).width / 2, displaySize(geometry).height / 2]]) }}>Add corner at center</button><button type="button" className="text-button" disabled={!!busy || !points.length} onClick={() => setPoints(p => p.slice(0, -1))}>Undo corner</button><button type="button" className="text-button" disabled={!!busy} onClick={() => setPoints([])}>Reset corners</button></div>
+        {marked && <><p>{points.length} of 4 corners selected.{points.length === 4 && !valid && ' These corners cannot be processed. Select four distinct corners inside the video, without crossing edges.'}</p><div className="connected-actions"><button type="button" className="text-button" disabled={!!busy || points.length >= 4} onClick={() => { if (geometry) setPoints(p => [...p, [displaySize(geometry).width / 2, displaySize(geometry).height / 2]]) }}>Add corner at center</button><button type="button" className="text-button" disabled={!!busy || !points.length} onClick={() => setPoints(p => p.slice(0, -1))}>Undo corner</button><button type="button" className="text-button" disabled={!!busy} onClick={() => setPoints([])}>Reset corners</button></div>
           <details><summary>Adjust corner coordinates</summary>{points.map((p, i) => <div key={i} className="recording-coordinates">{([0, 1] as const).map(axis => <label key={axis}>Corner {i + 1} {axis ? 'Y' : 'X'}<input type="number" min="0" max={geometry ? (axis ? displaySize(geometry).height : displaySize(geometry).width) - 1 : 0} value={Math.round(p[axis])} disabled={!!busy} onChange={e => setPoints(all => all.map((old, n) => n === i ? old.map((value, a) => a === axis ? Number(e.target.value) : value) as Point : old))} /></label>)}</div>)}</details></>}
       </>}
       {!status?.processing_status && <button type="button" className="button" disabled={!!busy || !file || !valid || (!!draft?.uploadId && !status)} onClick={() => void start()}>{draft?.uploadId ? 'Resume upload / confirm save' : 'Upload full frame'}</button>}

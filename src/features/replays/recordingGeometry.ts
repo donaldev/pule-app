@@ -93,6 +93,23 @@ export function pointerToDisplay(x: number, y: number, rect: { left: number; top
   const size = displaySize(g)
   return [Math.max(0, Math.min(size.width - 1, (x - rect.left) / rect.width * size.width)), Math.max(0, Math.min(size.height - 1, (y - rect.top) / rect.height * size.height))]
 }
+/** Match the processor's float32/integer bounding box, clipped 40px margins and resize. */
+export function analysisCrop(points: Point[], width: number, height: number) {
+  if (points.length !== 4 || !Number.isInteger(width) || !Number.isInteger(height) || width < 16 || height < 16 || width > 8192 || height > 8192 || width * height > 33554432) return null
+  const p = points.map(([x, y]) => [Math.fround(x), Math.fround(y)])
+  if (p.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x >= width || y >= height)) return null
+  const xs = p.map(([x]) => Math.trunc(x)), ys = p.map(([, y]) => Math.trunc(y))
+  const x = Math.max(0, Math.min(...xs) - 40), y = Math.max(0, Math.min(...ys) - 40)
+  const w = Math.min(width - x, Math.max(...xs) - Math.min(...xs) + 1 + 80)
+  const h = Math.min(height - y, Math.max(...ys) - Math.min(...ys) + 1 + 80)
+  if (w <= 0 || h <= 0) return null
+  const analysisWidth = Math.min(1440, Math.floor(4096 * w / h))
+  if (analysisWidth < 1) return null
+  const scaledHeight = h * (analysisWidth / w), floor = Math.floor(scaledHeight)
+  // Python round() uses ties-to-even.
+  const analysisHeight = Math.max(1, scaledHeight - floor === 0.5 ? floor + floor % 2 : Math.round(scaledHeight))
+  return analysisHeight <= 4096 ? { x, y, width: w, height: h, analysisWidth, analysisHeight } : null
+}
 export function validCorners(points: Point[], width: number, height: number): boolean {
   if (points.length !== 4 || points.some(p => p.some(n => !Number.isFinite(n)) || p[0] < 0 || p[0] >= width || p[1] < 0 || p[1] >= height)) return false
   let direction = 0, area = 0
@@ -102,5 +119,5 @@ export function validCorners(points: Point[], width: number, height: number): bo
     if (!cross || (direction && Math.sign(cross) !== direction)) return false
     direction = Math.sign(cross); area += a[0] * b[1] - b[0] * a[1]
   }
-  return Math.abs(area / 2) >= 100
+  return Math.abs(area / 2) >= 100 && analysisCrop(points, width, height) !== null
 }

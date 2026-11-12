@@ -23,6 +23,7 @@ from urllib.parse import urlparse, quote
 import cv2
 import numpy as np
 from r2_source import R2Source, MAX_SOURCE_BYTES
+from replay_processor import analysis_crop, ANALYSIS_WIDTH, MAX_ANALYSIS_HEIGHT
 
 MAX_BYTES = 262144000
 UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
@@ -135,8 +136,8 @@ def validate_corners(source, job):
                 or (corners[:, 0] >= w).any() or (corners[:, 1] >= h).any()
                 or not cv2.isContourConvex(corners) or abs(cv2.contourArea(corners)) < 100):
             raise ValueError('Expected four cyclic convex corners inside the original recording')
-        _, _, bw, bh = cv2.boundingRect(corners)
-        if (bh + 80) * 1440 / (bw + 80) > 4096:
+        _, _, _, _, analysis_width, analysis_height = analysis_crop(corners, w, h)
+        if not (1 <= analysis_width <= ANALYSIS_WIDTH and 1 <= analysis_height <= MAX_ANALYSIS_HEIGHT):
             raise ValueError('Table crop exceeds processor memory limit')
         return corners
     finally:
