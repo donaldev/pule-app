@@ -270,8 +270,12 @@ def main():
         print(json.dumps(result))
         if result['status'] in ('failed', 'unconfirmed'):
             raise SystemExit(1)
-    except Exception:
-        print(json.dumps({'status': 'worker_failed'}))  # No credentials, paths or signed URLs.
+    except Exception as exc:
+        print(json.dumps({
+            'status': 'worker_failed',
+            'error_type': type(exc).__name__,
+            'error_stage': 'worker_execution'
+        }))
         raise SystemExit(1) from None
 
 
