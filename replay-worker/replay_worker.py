@@ -215,7 +215,14 @@ def run_once(api, processor=process_recording, r2=None):
     if job is None:
         return {'status': 'idle'}
     # Validate before any Storage request; malformed trusted jobs lose their lease.
-    validate_job(job)
+    try:
+        validate_job(job)
+    except ValueError as exc:
+        print(json.dumps({
+        'status': 'invalid_job',
+        'reason': str(exc)
+        }))
+        raise
     args = {'p_upload': job['job_id'], 'p_lease': job['lease_id']}
     try:
         with tempfile.TemporaryDirectory(prefix='pule-replay-') as tmp:
