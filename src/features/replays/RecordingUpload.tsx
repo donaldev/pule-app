@@ -9,7 +9,6 @@ export function RecordingUploadAction({ userId, frame, onPublished }: { userId: 
   const [selected, setSelected] = useState<File | null>(null)
   const picker = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<ReplayUploadStatus | null>(null)
-  const [statusOpen, setStatusOpen] = useState(false)
   const [showPending, setShowPending] = useState(false)
   const [message, setMessage] = useState('')
   useEffect(() => {
@@ -18,11 +17,11 @@ export function RecordingUploadAction({ userId, frame, onPublished }: { userId: 
     return () => { active = false }
   }, [userId, frame.id])
   return <>
-    {pending ? <details className="replay-pending" open={statusOpen} onToggle={e => setStatusOpen(e.currentTarget.open)}><summary>{pending.processing_status === 'failed' ? 'Replay couldn’t be created' : pending.processing_status === 'queued' || pending.processing_status === 'processing' ? 'Creating replay…' : 'Recording not finished'}</summary><button type="button" className="text-button" onClick={() => setShowPending(true)}>Cancel Replay{pending.processing_status === 'failed' ? ' & start again' : ''}</button></details>
+    {pending ? <button type="button" className="text-button replay-pending" onClick={() => setShowPending(true)}>{pending.processing_status === 'failed' ? 'Replay failed' : pending.processing_status === 'queued' || pending.processing_status === 'processing' ? 'Creating replay…' : 'Recording not finished'}</button>
       : <button type="button" className="button button-secondary create-replay" onClick={() => picker.current?.click()}>Create Replay</button>}
     <input ref={picker} type="file" accept="video/mp4,.mp4" hidden aria-label="Choose frame recording" onChange={e => { const file = e.target.files?.[0]; if (file) { setMessage(''); setSelected(file) }; e.target.value = '' }} />
-    {message && <p role="status" className="annotation">{message}</p>}
     {(selected || showPending) && <Modal title={`Create replay · Frame ${frame.frame_number}`} onClose={() => { setSelected(null); setShowPending(false); void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }}>
+      {message && <p role="status" className="annotation">{message}</p>}
       <RecordingUpload key={`${userId}:${frame.id}`} userId={userId} frame={frame} onPublished={() => { void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }} initialFile={selected ?? undefined} initialStatus={pending} onRemoved={() => { setSelected(null); setShowPending(false); setPending(null); setMessage('Replay cancelled. You can choose another video; stored files will be cleared safely.'); onPublished() }} />
     </Modal>}</>
 }

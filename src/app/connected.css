@@ -952,12 +952,9 @@
 .recording-upload .connected-actions { flex-wrap:wrap; }
 
 /* Replay actions share the compact frame row; the video mark always means playable. */
-.connected-app .gameplay-history .timeline > li { grid-template-columns:32px minmax(0,1fr) auto; gap:8px; padding-block:8px; align-items:start; }
+.connected-app .gameplay-history .timeline > li { grid-template-columns:32px minmax(0,1fr) auto 44px; gap:8px; padding-block:8px; align-items:center; min-height:64px; }
 .connected-app .frame-replay-action { grid-column:3; grid-row:1; align-self:center; }
 .frame-duration { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
-.frame-details summary { min-height:44px; display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; }
-.frame-details summary::before { content:'›'; font-size:20px; }
-.frame-details[open] summary::before { transform:rotate(90deg); }
 .connected-app .replay-video, .replay-count { color:var(--brass,#C4A46B); }
 .replay-video { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; }
 .replay-count { display:inline-flex; align-items:center; gap:5px; font-size:13px; margin-left:8px; }
@@ -972,3 +969,14 @@
 .replay-delete { min-height:44px; margin-top:12px; text-decoration:underline; }
 .recording-table circle { stroke:#fff4d6; stroke-width:2; vector-effect:non-scaling-stroke; }
 .recording-upload .connected-actions .text-button { min-height:44px; padding:8px 12px; }
+
+.connected-app .gameplay-history .frame-history-row > .frame-history-info { grid-column:2; grid-row:1; }
+.connected-app .gameplay-history .frame-history-row > .frame-details-toggle { grid-column:4; grid-row:1; display:grid; place-items:center; width:44px; min-width:44px; height:44px; min-height:44px; padding:0; margin:0; transform:none; }
+.frame-details-toggle > span { width:8px; height:8px; border-right:2px solid var(--brass); border-bottom:2px solid var(--brass); transform:rotate(45deg); }
+.frame-details-toggle[aria-expanded="true"] > span { transform:rotate(225deg); }
+.connected-app .gameplay-history .frame-history-row > .frame-history-details { grid-column:2 / -1; padding:4px 0 8px; }
+.frame-history-details[hidden] { display:none; }
+.frame-history-details p { margin:0 0 8px; }
+.frame-history-row :is(button,a):active { transform:none; }
+.connected-app .frame-history-row .replay-pending { min-height:44px; margin:0; padding:4px; font-size:12px; }
+@media (max-width:380px) { .connected-app .gameplay-history .timeline > li.frame-history-row { gap:4px; } }
