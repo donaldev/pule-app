@@ -1,31 +1,41 @@
 import { useEffect, useRef, useState } from 'react'
 import { Modal } from '../../components/ui/Primitives'
 import type { ReplayUploadStatus, SavedFrame } from '../../data/remote/database.types'
-import { finalizeRecording, getRecordingStatus, queueRecording, reserveRecording, transferRecording } from '../../data/remote/recordingService'
+import { finalizeRecording, getFrameRecording, removeFrameReplay, getRecordingStatus, queueRecording, reserveRecording, transferRecording } from '../../data/remote/recordingService'
 import { displaySize, displayToSource, inspectRecording, pointerToDisplay, sourceToDisplay, validCorners, type Point, type RecordingGeometry } from './recordingGeometry'
-import { hashRecording, readRecording, recordingKey, saveRecording, type RecordingDraft } from './recordingJournal'
+import { clearRecording, hashRecording, readRecording, recordingKey, saveRecording, type RecordingDraft } from './recordingJournal'
 
 export function RecordingUploadAction({ userId, frame, onPublished }: { userId: string; frame: SavedFrame; onPublished: () => void }) {
   const [selected, setSelected] = useState<File | null>(null)
   const picker = useRef<HTMLInputElement>(null)
-  return <><button type="button" className="text-button watch-replay" onClick={() => picker.current?.click()}>Create Replay</button>
-    <input ref={picker} type="file" accept="video/mp4,.mp4" hidden aria-label="Choose frame recording" onChange={e => { const file = e.target.files?.[0]; if (file) setSelected(file); e.target.value = '' }} />
-    {selected && <Modal title={`Create replay · Frame ${frame.frame_number}`} onClose={() => setSelected(null)}>
-      <RecordingUpload key={`${userId}:${frame.id}`} userId={userId} frame={frame} onPublished={onPublished} initialFile={selected} />
+  const [pending, setPending] = useState<ReplayUploadStatus | null>(null)
+  const [showPending, setShowPending] = useState(false)
+  const [message, setMessage] = useState('')
+  useEffect(() => {
+    let active = true
+    getFrameRecording(userId, frame.id).then(value => { if (active) setPending(value) }).catch(() => {})
+    return () => { active = false }
+  }, [userId, frame.id])
+  return <><button type="button" className="text-button watch-replay" onClick={() => pending ? setShowPending(true) : picker.current?.click()}>{pending ? 'Cancel Replay' : 'Create Replay'}</button>
+    <input ref={picker} type="file" accept="video/mp4,.mp4" hidden aria-label="Choose frame recording" onChange={e => { const file = e.target.files?.[0]; if (file) { setMessage(''); setSelected(file) }; e.target.value = '' }} />
+    {message && <p role="status" className="annotation">{message}</p>}
+    {(selected || showPending) && <Modal title={`Create replay · Frame ${frame.frame_number}`} onClose={() => { setSelected(null); setShowPending(false) }}>
+      <RecordingUpload key={`${userId}:${frame.id}`} userId={userId} frame={frame} onPublished={onPublished} initialFile={selected ?? undefined} initialStatus={pending} onRemoved={() => { setSelected(null); setShowPending(false); setPending(null); setMessage('Replay cancelled. File cleanup is pending; you can create a new replay.'); onPublished() }} />
     </Modal>}</>
 }
-export function RecordingUpload({ userId, frame, onPublished, initialFile }: { userId: string; frame: SavedFrame; onPublished: () => void; initialFile?: File }) {
+export function RecordingUpload({ userId, frame, onPublished, initialFile, initialStatus, onRemoved }: { userId: string; frame: SavedFrame; onPublished: () => void; initialFile?: File; initialStatus?: ReplayUploadStatus | null; onRemoved?: () => void }) {
   const key = recordingKey(import.meta.env.VITE_SUPABASE_URL, userId, frame.id)
   const [initial] = useState(() => { try { return { draft: readRecording(key, userId, frame.id), error: '' } } catch { return { draft: null, error: 'Recording recovery could not be read. Use the original browser; nothing was discarded.' } } })
   const [draft, setDraft] = useState<RecordingDraft | null>(initial.draft)
   const [checkedAt, setCheckedAt] = useState(Date.now)
-  const [status, setStatus] = useState<ReplayUploadStatus | null>(null)
+  const [status, setStatus] = useState<ReplayUploadStatus | null>(initialStatus ?? null)
   const [file, setFile] = useState<File | null>(null)
   const [geometry, setGeometry] = useState<RecordingGeometry | null>(null)
   const [points, setPoints] = useState<Point[]>([])
   const [preview, setPreview] = useState('')
   const [marked, setMarked] = useState(false)
   const [busy, setBusy] = useState('')
+  const [removing, setRemoving] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState(initial.error)
   const alive = useRef(true), locked = useRef(false), cancel = useRef<AbortController | null>(null)
@@ -38,13 +48,13 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile }: { u
   }, [])
   useEffect(() => {
     let active = true
-    if (initial.draft?.uploadId) getRecordingStatus(userId, initial.draft.uploadId).then(value => { if (active) { setStatus(value); setCheckedAt(Date.now()) } }).catch(() => { if (active) setError('Could not check the saved recording. Select the same recording and save again to safely continue.') })
+    if (initial.draft?.uploadId) getRecordingStatus(userId, initial.draft.uploadId).then(value => { if (active) { if (['cleanup', 'cleaned'].includes(value.status)) { try { clearRecording(key, initial.draft!); setDraft(null) } catch { setError('The previous replay was removed, but local recovery could not be cleared.') } } else setStatus(value); setCheckedAt(Date.now()) } }).catch(() => { if (active) setError('Could not check the saved recording. Select the same recording and save again to safely continue.') })
     return () => { active = false }
   }, [initial.draft?.uploadId, userId])
   function ensureActive() { if (!alive.current) throw Error('Recording closed.'); cancel.current?.signal.throwIfAborted() }
   function persist(next: RecordingDraft) { saveRecording(key, next); setDraft(next); return next }
   async function run(label: string, task: () => Promise<void>) {
-    if (locked.current || initial.error) return
+    if (locked.current || initial.error || removing) return
     locked.current = true; setCheckedAt(Date.now()); setBusy(label); setError(''); setProgress(0); cancel.current = new AbortController()
     try {
       if (!navigator.locks) throw Error('This browser cannot safely coordinate recording uploads. Use a current Safari or Chrome browser.')
@@ -61,9 +71,14 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile }: { u
       if (chosen.type && chosen.type !== 'video/mp4' || !/\.mp4$/i.test(chosen.name) || chosen.size < 1 || chosen.size > (import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 2147483648 : 262144000)) throw Error(`Choose an MP4 recording up to ${import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? '2 GiB' : '250 MiB'}. Export MOV recordings as MP4 first.`)
       const g = await inspectRecording(chosen); ensureActive()
       const hash = await hashRecording(chosen, cancel.current!.signal, n => { if (alive.current) setProgress(n) }); ensureActive()
-      const fixed = draft?.reservationRequested || draft?.uploadId
-      if (draft && fixed && (draft.hash !== hash || draft.bytes !== chosen.size)) throw Error('Select the exact original file for this saved recording. A different file cannot replace it.')
-      const next = (fixed ? draft : null) ?? { source_provider: import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 'r2' : 'supabase', version: 1, userId, frameId: frame.id, operation: crypto.randomUUID(), hash, bytes: chosen.size, geometry: g, corners: [] } satisfies RecordingDraft
+      let previous = draft
+      if (previous?.uploadId) {
+        const saved = await getRecordingStatus(userId, previous.uploadId); ensureActive()
+        if (['cleanup', 'cleaned'].includes(saved.status)) { clearRecording(key, previous); previous = null; setDraft(null); setStatus(null) }
+      }
+      const fixed = previous?.reservationRequested || previous?.uploadId
+      if (previous && fixed && (previous.hash !== hash || previous.bytes !== chosen.size)) throw Error('Select the exact original file for this saved recording. A different file cannot replace it.')
+      const next = (fixed ? previous : null) ?? { source_provider: import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 'r2' : 'supabase', version: 1, userId, frameId: frame.id, operation: crypto.randomUUID(), hash, bytes: chosen.size, geometry: g, corners: [] } satisfies RecordingDraft
       persist(next)
       if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
       objectUrl.current = URL.createObjectURL(chosen)
@@ -94,6 +109,23 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile }: { u
   const valid = !!geometry && validCorners(rawCorners, geometry.width, geometry.height)
   const processing = !!status?.processing_status && ['queued', 'processing', 'completed'].includes(status.processing_status)
   const expired = status && (['cleanup', 'cleaned'].includes(status.status) || (!status.processing_status && Date.parse(status.expires_at) <= checkedAt))
+  async function remove() {
+    if (removing || initial.error) return
+    if ((draft?.reservationRequested || status) && !window.confirm('Cancel this replay? The recording and generated files will be removed by safe cleanup.')) return
+    setRemoving(true); setError('')
+    cancel.current?.abort(); transfer.current?.pause()
+    try {
+      if (!navigator.locks) throw Error('This browser cannot safely cancel this upload.')
+      await navigator.locks.request(key, async () => {
+        const saved = readRecording(key, userId, frame.id)
+        const target = status?.upload_id ?? saved?.uploadId
+        if (target || saved?.reservationRequested) await removeFrameReplay(userId, frame.id, target ? { upload: target } : { operation: saved!.operation })
+        if (saved && (!target || !saved.uploadId || saved.uploadId === target)) clearRecording(key, saved)
+        if (alive.current) { setDraft(null); setStatus(null); setFile(null); setPreview(''); setGeometry(null); setPoints([]); setMarked(false); onRemoved?.() }
+      })
+    } catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : 'Cancellation could not be confirmed.') }
+    finally { if (alive.current) setRemoving(false) }
+  }
   async function start() {
     await run('Saving replay', async () => {
       if (!file || !draft || !geometry || !valid) throw Error('Choose the recording and mark four corners first.')
@@ -145,6 +177,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile }: { u
       <button type="button" className="button" disabled={!!busy || !file || !marked || !valid || !!initial.error} onClick={() => void start()}>Save &amp; Create Replay</button>
     </>}
     {busy && <div role="status"><p>{busy === 'Saving replay' ? 'Saving replay… Keep this screen open.' : 'Checking recording…'}</p><progress value={progress} max={100} aria-label={busy} /></div>}
+    {(file || draft || status) && <button type="button" className="text-button" disabled={removing || !!initial.error} onClick={() => void remove()}>{removing ? 'Cancelling…' : status?.processing_status ? 'Cancel Replay' : 'Cancel Upload'}</button>}
     {error && <p role="alert" className="connected-error">{error}</p>}
   </section>
 }

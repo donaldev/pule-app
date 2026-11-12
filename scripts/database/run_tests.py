@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sql-test', choices=['r2_frame_recordings.sql','frame_replay_processing.sql','frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
+    parser.add_argument('--sql-test', choices=['replay_cancellation.sql','r2_frame_recordings.sql','frame_replay_processing.sql','frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
     parser.add_argument('--atomic-replay-release', action='store_true', help='Apply the generated atomic replay release bundle locally')
     parser.add_argument('--port', type=int, default=55439)
     parser.add_argument('--upgrade-foundation', action='store_true', help='Seed original two migrations, then upgrade existing synthetic history')

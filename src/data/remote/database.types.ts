@@ -61,6 +61,8 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      get_my_frame_recording: { Args: {p_frame:UUID};Returns:ReplayUploadStatus | null }
+      remove_frame_replay: { Args: {p_frame:UUID;p_upload?:UUID;p_operation?:UUID;p_path?:string};Returns:undefined }
       reserve_frame_replay_upload: { Args: {p_operation:UUID;p_frame:UUID;p_bytes:number;p_content_type?:string};Returns:ReplayUploadStatus }
       finalize_frame_replay_upload: { Args: {p_upload:UUID};Returns:ReplayUploadStatus }
       get_my_frame_replay_upload: { Args: {p_upload:UUID};Returns:ReplayUploadStatus }

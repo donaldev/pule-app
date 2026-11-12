@@ -78,3 +78,20 @@ export function transferRecording(file: File, userId: string, reservation: Repla
     pause,
   }
 }
+
+/** Exact attempt/path only; unknown responses retain the local journal for safe retry. */
+export async function removeFrameReplay(userId: string, frameId: string, target: { upload?: string; operation?: string; path?: string }) {
+  const authorization = await actorAuthorization(userId)
+  const { error } = await getSupabase().rpc('remove_frame_replay', { p_frame: frameId, p_upload: target.upload, p_operation: target.operation, p_path: target.path })
+    .setHeader('Authorization', authorization).retry(false).abortSignal(AbortSignal.timeout(20_000))
+  if (error) throw Error('Replay removal could not be confirmed. Nothing was cleared locally; try again with the same account.')
+  await actorAuthorization(userId)
+}
+export async function getFrameRecording(userId: string, frameId: string): Promise<ReplayUploadStatus | null> {
+  const authorization = await actorAuthorization(userId)
+  const { data, error } = await getSupabase().rpc('get_my_frame_recording', { p_frame: frameId })
+    .setHeader('Authorization', authorization).retry(false).abortSignal(AbortSignal.timeout(20_000))
+  if (error) throw Error('Could not check this frame’s recording.')
+  await actorAuthorization(userId)
+  return data === null ? null : validateUploadStatus(data)
+}
