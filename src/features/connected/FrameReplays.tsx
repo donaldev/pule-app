@@ -50,12 +50,11 @@ export function FrameReplays({ userId, sessionId, children, upload }: {
     try {
       await removeFrameReplay(userId, frame.id, { path: replay.storage_path })
       setConfirmDelete(null); close(); setReplays(rows => rows.filter(r => r.storage_path !== replay.storage_path)); setAttempt(n => n + 1)
-      setRemovalMessage('Replay video removed. Stored files will be cleared safely. Your frame result is unchanged.')
+      setRemovalMessage('')
     } catch (reason) { setRemovalMessage(reason instanceof Error ? reason.message : 'Replay deletion could not be confirmed.') }
     finally { setRemoving(false) }
   }
   return <>
-    {removalMessage && <p role="status" className="annotation">{removalMessage}</p>}
     {availability === 'loading' && <p role="status" className="annotation">Checking replays…</p>}
     {availability === 'failed' && <p role="alert" className="annotation">Replay availability could not be checked. <button type="button" className="text-button" onClick={() => { setAvailability('loading'); setAttempt(n => n + 1) }}>Check replays again</button></p>}
     {children(frame => availability === 'ready' && replays.some(r => r.frame_id === frame.id && r.group_id === frame.group_id)
@@ -70,8 +69,8 @@ export function FrameReplays({ userId, sessionId, children, upload }: {
         {upload?.detailEligible && playback.frame.detail_eligible && playback.frame.participants.some(p => p.player_id === upload.playerId) && <button type="button" className="text-button replay-delete" onClick={() => { setRemovalMessage(''); setConfirmDelete(playback.frame) }}>Delete Replay video</button>}
       </div>
     </Modal>}
-    {confirmDelete && <Modal title="Delete replay video?" onClose={() => { if (!removing) setConfirmDelete(null) }}>
-      <div className="replay-confirm"><p>This deletes the video only. The frame result, match history and statistics are unaffected.</p><p className="annotation">Stored files are removed safely in the background.</p>
+    {confirmDelete && <Modal title={`Delete replay for Frame ${confirmDelete.frame_number}?`} onClose={() => { if (!removing) setConfirmDelete(null) }}>
+      <div className="replay-confirm"><p>This removes the video only. Your frame result and statistics stay unchanged.</p>
       <div className="connected-actions"><button className="button button-secondary" disabled={removing} onClick={() => setConfirmDelete(null)}>Keep replay</button><button className="button removal-confirm" disabled={removing} onClick={() => void remove(confirmDelete)}>{removing ? 'Deleting…' : 'Delete video'}</button></div>
       {removalMessage && <p role="alert">{removalMessage}</p>}</div>
     </Modal>}

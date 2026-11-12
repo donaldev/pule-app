@@ -10,7 +10,6 @@ export function RecordingUploadAction({ userId, frame, onPublished }: { userId: 
   const picker = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<ReplayUploadStatus | null>(null)
   const [showPending, setShowPending] = useState(false)
-  const [message, setMessage] = useState('')
   useEffect(() => {
     let active = true
     getFrameRecording(userId, frame.id).then(value => { if (active) setPending(value) }).catch(() => {})
@@ -19,10 +18,9 @@ export function RecordingUploadAction({ userId, frame, onPublished }: { userId: 
   return <>
     {pending ? <button type="button" className="text-button replay-pending" onClick={() => setShowPending(true)}>{pending.processing_status === 'failed' ? 'Replay failed' : pending.processing_status === 'queued' || pending.processing_status === 'processing' ? 'Creating replay…' : 'Recording not finished'}</button>
       : <button type="button" className="button button-secondary create-replay" onClick={() => picker.current?.click()}>Create Replay</button>}
-    <input ref={picker} type="file" accept="video/mp4,.mp4" hidden aria-label="Choose frame recording" onChange={e => { const file = e.target.files?.[0]; if (file) { setMessage(''); setSelected(file) }; e.target.value = '' }} />
+    <input ref={picker} type="file" accept="video/mp4,.mp4" hidden aria-label="Choose frame recording" onChange={e => { const file = e.target.files?.[0]; if (file) { setSelected(file) }; e.target.value = '' }} />
     {(selected || showPending) && <Modal title={`Create replay · Frame ${frame.frame_number}`} onClose={() => { setSelected(null); setShowPending(false); void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }}>
-      {message && <p role="status" className="annotation">{message}</p>}
-      <RecordingUpload key={`${userId}:${frame.id}`} userId={userId} frame={frame} onPublished={() => { void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }} initialFile={selected ?? undefined} initialStatus={pending} onRemoved={() => { setSelected(null); setShowPending(false); setPending(null); setMessage('Replay cancelled. You can choose another video; stored files will be cleared safely.'); onPublished() }} />
+      <RecordingUpload key={`${userId}:${frame.id}`} userId={userId} frame={frame} onPublished={() => { void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }} initialFile={selected ?? undefined} initialStatus={pending} onRemoved={() => { setSelected(null); setShowPending(false); setPending(null); onPublished() }} />
     </Modal>}</>
 }
 export function RecordingUpload({ userId, frame, onPublished, initialFile, initialStatus, onRemoved }: { userId: string; frame: SavedFrame; onPublished: () => void; initialFile?: File; initialStatus?: ReplayUploadStatus | null; onRemoved?: () => void }) {
@@ -181,7 +179,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
     </>}
     {busy && <div role="status"><p>{busy === 'Saving replay' ? 'Saving replay… Keep this screen open.' : 'Checking recording…'}</p><progress value={progress} max={100} aria-label={busy} /></div>}
     {(file || draft || status) && <button type="button" className="text-button" disabled={removing || !!initial.error} onClick={() => void remove()}>{removing ? 'Cancelling…' : status?.processing_status ? 'Cancel Replay' : 'Cancel Upload'}</button>}
-    {confirmCancel && <Modal title="Cancel replay?" onClose={() => setConfirmCancel(false)}><div className="replay-confirm"><p>Your frame result, match history and statistics will stay unchanged. You can choose another video after cancelling.</p><p className="annotation">Stored files will be cleared safely in the background.</p><div className="connected-actions"><button type="button" className="button button-secondary" onClick={() => setConfirmCancel(false)}>Keep replay</button><button type="button" className="button removal-confirm" onClick={() => void remove(true)}>Cancel replay</button></div></div></Modal>}
+    {confirmCancel && <Modal title={`Cancel replay for Frame ${frame.frame_number}?`} onClose={() => setConfirmCancel(false)}><div className="replay-confirm"><p>Your frame result and statistics stay unchanged.</p><div className="connected-actions"><button type="button" className="button button-secondary" onClick={() => setConfirmCancel(false)}>Keep replay</button><button type="button" className="button removal-confirm" onClick={() => void remove(true)}>Cancel replay</button></div></div></Modal>}
     {error && <p role="alert" className="connected-error">{error}</p>}
   </section>
 }
