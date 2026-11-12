@@ -67,8 +67,16 @@ export function parseRecordingMetadata(buffer: ArrayBuffer): RecordingGeometry {
     if (box.type === 'clap') throw Error('Cropped video transforms are unsupported. Export a standard MP4.')
   }
   if (width < 16 || height < 16 || width > 8192 || height > 8192 || width * height > 33554432) throw Error('This recording exceeds the supported resolution.')
-  const translation = rotation === 90 ? [height * 65536, 0] : rotation === 180 ? [width * 65536, height * 65536] : rotation === 270 ? [0, width * 65536] : [0, 0]
-  if (!((values[6] === 0 && values[7] === 0) || (values[6] === translation[0] && values[7] === translation[1]))) throw Error('Unsupported shifted video transform.')
+  // Track translation positions the rotated rectangle on the movie canvas; it
+  // does not change encoded pixels. Remuxers need not use a canonical origin.
+  // Normalize its bounding-box origin, as the single-track video preview does.
+  // Only the exact unit right-angle matrices above are supported (no crop/scale).
+  const tx = values[6] / 65536, ty = values[7] / 65536
+  const bounds = [[0, 0], [width, 0], [width, height], [0, height]].map(([x, y]) =>
+    [a / 65536 * x + c / 65536 * y + tx, b / 65536 * x + d / 65536 * y + ty])
+  const displayedWidth = Math.max(...bounds.map(p => p[0])) - Math.min(...bounds.map(p => p[0]))
+  const displayedHeight = Math.max(...bounds.map(p => p[1])) - Math.min(...bounds.map(p => p[1]))
+  if (displayedWidth !== (rotation % 180 ? height : width) || displayedHeight !== (rotation % 180 ? width : height)) throw Error('Unsupported video display bounds. Export a standard MP4.')
   return { width, height, rotation: rotation as RecordingGeometry['rotation'] }
 }
 export function displaySize(g: RecordingGeometry) { return g.rotation % 180 ? { width: g.height, height: g.width } : { width: g.width, height: g.height } }
