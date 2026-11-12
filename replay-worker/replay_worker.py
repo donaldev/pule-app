@@ -260,21 +260,33 @@ def main():
     parser = argparse.ArgumentParser(description='Claim and process one trusted Pule replay job')
     parser.add_argument('--check', action='store_true', help='Validate local dependencies only; never claim or contact Supabase')
     args = parser.parse_args()
+    stage = 'verify_toolchain'
     try:
         verify_toolchain()
         if args.check:
             print(json.dumps({'status': 'toolchain_ready'}))
             return
+
+        stage = 'initialize_r2'
         r2 = R2Source() if os.environ.get('R2_ACCOUNT_ID') else None
-        result = run_once(SupabaseAPI(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_ROLE_KEY']), r2=r2)
+
+        stage = 'claim_and_process'
+        result = run_once(
+            SupabaseAPI(
+                os.environ['SUPABASE_URL'],
+                os.environ['SUPABASE_SERVICE_ROLE_KEY']
+            ),
+            r2=r2
+        )
         print(json.dumps(result))
         if result['status'] in ('failed', 'unconfirmed'):
             raise SystemExit(1)
+
     except Exception as exc:
         print(json.dumps({
             'status': 'worker_failed',
             'error_type': type(exc).__name__,
-            'error_stage': 'worker_execution'
+            'error_stage': stage
         }))
         raise SystemExit(1) from None
 
