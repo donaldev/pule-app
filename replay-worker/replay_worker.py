@@ -251,7 +251,12 @@ def run_once(api, processor=process_recording, r2=None):
                     'p_duration': actual['duration_seconds'], 'p_clips': result['clip_count']})
             # SQL queues source deletion atomically with publication. Never delete here.
             return {'job_id': job['job_id'], 'status': 'completed'}
-    except Exception:
+    except Exception as exc:
+        print(json.dumps({
+            'status': 'processing_error',
+            'error_type': type(exc).__name__,
+            'reason': str(exc)[:300]
+        }))
         try:
             api.rpc('fail_frame_replay_processing', args)
             return {'job_id': job['job_id'], 'status': 'failed'}
