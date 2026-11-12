@@ -209,9 +209,16 @@ def verify_video(path):
 
 
 def run_once(api, processor=process_recording, r2=None):
-    job = api.rpc('claim_r2_frame_replay_processing', {}) if r2 is not None else None
-    if job is None:
-        job = api.rpc('claim_frame_replay_processing', {})
+    try:
+        job = api.rpc('claim_r2_frame_replay_processing', {}) if r2 is not None else None
+        if job is None:
+            job = api.rpc('claim_frame_replay_processing', {})
+    except ValueError as exc:
+        print(json.dumps({
+            'status': 'claim_failed',
+            'reason': str(exc)
+        }))
+        raise
     if job is None:
         return {'status': 'idle'}
     # Validate before any Storage request; malformed trusted jobs lose their lease.
