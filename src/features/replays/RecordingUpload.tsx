@@ -9,6 +9,7 @@ export function RecordingUploadAction({ userId, frame, onPublished }: { userId: 
   const [selected, setSelected] = useState<File | null>(null)
   const picker = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<ReplayUploadStatus | null>(null)
+  const [statusOpen, setStatusOpen] = useState(false)
   const [showPending, setShowPending] = useState(false)
   const [message, setMessage] = useState('')
   useEffect(() => {
@@ -16,11 +17,13 @@ export function RecordingUploadAction({ userId, frame, onPublished }: { userId: 
     getFrameRecording(userId, frame.id).then(value => { if (active) setPending(value) }).catch(() => {})
     return () => { active = false }
   }, [userId, frame.id])
-  return <><button type="button" className="text-button watch-replay" onClick={() => pending ? setShowPending(true) : picker.current?.click()}>{pending ? 'Cancel Replay' : 'Create Replay'}</button>
+  return <>
+    {pending ? <details className="replay-pending" open={statusOpen} onToggle={e => setStatusOpen(e.currentTarget.open)}><summary>{pending.processing_status === 'failed' ? 'Replay couldn’t be created' : pending.processing_status === 'queued' || pending.processing_status === 'processing' ? 'Creating replay…' : 'Recording not finished'}</summary><button type="button" className="text-button" onClick={() => setShowPending(true)}>Cancel Replay{pending.processing_status === 'failed' ? ' & start again' : ''}</button></details>
+      : <button type="button" className="button button-secondary create-replay" onClick={() => picker.current?.click()}>Create Replay</button>}
     <input ref={picker} type="file" accept="video/mp4,.mp4" hidden aria-label="Choose frame recording" onChange={e => { const file = e.target.files?.[0]; if (file) { setMessage(''); setSelected(file) }; e.target.value = '' }} />
     {message && <p role="status" className="annotation">{message}</p>}
-    {(selected || showPending) && <Modal title={`Create replay · Frame ${frame.frame_number}`} onClose={() => { setSelected(null); setShowPending(false) }}>
-      <RecordingUpload key={`${userId}:${frame.id}`} userId={userId} frame={frame} onPublished={onPublished} initialFile={selected ?? undefined} initialStatus={pending} onRemoved={() => { setSelected(null); setShowPending(false); setPending(null); setMessage('Replay cancelled. File cleanup is pending; you can create a new replay.'); onPublished() }} />
+    {(selected || showPending) && <Modal title={`Create replay · Frame ${frame.frame_number}`} onClose={() => { setSelected(null); setShowPending(false); void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }}>
+      <RecordingUpload key={`${userId}:${frame.id}`} userId={userId} frame={frame} onPublished={() => { void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }} initialFile={selected ?? undefined} initialStatus={pending} onRemoved={() => { setSelected(null); setShowPending(false); setPending(null); setMessage('Replay cancelled. You can choose another video; stored files will be cleared safely.'); onPublished() }} />
     </Modal>}</>
 }
 export function RecordingUpload({ userId, frame, onPublished, initialFile, initialStatus, onRemoved }: { userId: string; frame: SavedFrame; onPublished: () => void; initialFile?: File; initialStatus?: ReplayUploadStatus | null; onRemoved?: () => void }) {
@@ -36,6 +39,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   const [marked, setMarked] = useState(false)
   const [busy, setBusy] = useState('')
   const [removing, setRemoving] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState(initial.error)
   const alive = useRef(true), locked = useRef(false), cancel = useRef<AbortController | null>(null)
@@ -62,7 +66,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
         if (!lock) throw Error('This recording is open in another tab. Pause it there first.')
         await task()
       })
-    } catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : 'Recording could not be saved. Keep the same file selected and try saving again.') }
+    } catch (reason) { console.error('Replay save failed', reason); if (alive.current) setError(reason instanceof Error ? reason.message : 'Couldn’t save your video. Keep it selected and try again.') }
     finally { locked.current = false; if (alive.current) { setBusy(''); setCheckedAt(Date.now()) } }
   }
   async function choose(chosen?: File) {
@@ -109,10 +113,10 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   const valid = !!geometry && validCorners(rawCorners, geometry.width, geometry.height)
   const processing = !!status?.processing_status && ['queued', 'processing', 'completed'].includes(status.processing_status)
   const expired = status && (['cleanup', 'cleaned'].includes(status.status) || (!status.processing_status && Date.parse(status.expires_at) <= checkedAt))
-  async function remove() {
+  async function remove(confirmed = false) {
     if (removing || initial.error) return
-    if ((draft?.reservationRequested || status) && !window.confirm('Cancel this replay? The recording and generated files will be removed by safe cleanup.')) return
-    setRemoving(true); setError('')
+    if ((draft?.reservationRequested || status) && !confirmed) { setConfirmCancel(true); return }
+    setConfirmCancel(false); setRemoving(true); setError('')
     cancel.current?.abort(); transfer.current?.pause()
     try {
       if (!navigator.locks) throw Error('This browser cannot safely cancel this upload.')
@@ -150,19 +154,19 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       }
       if (current.processing_status !== 'uploaded') throw Error('This recording cannot be saved yet. Your previous save has been retained.')
       const queued = await queueRecording(userId, current.upload_id, saved.corners, geometry.width, geometry.height)
-      ensureActive(); setStatus(queued)
+      ensureActive(); setStatus(queued); onPublished()
     })
   }
   return <section className="recording-upload" aria-label="Frame recording upload">
-    <p>Choose one complete recording of frame {frame.frame_number}. Keep the camera still and the whole table visible.</p>
-    {processing && <p role="status">{status?.processing_status === 'completed' ? 'Your replay is ready.' : 'Creating replay…'} You can leave this screen.</p>}
-    {status?.processing_status === 'failed' && <p role="alert">Replay processing failed. Your recording has been retained.</p>}
-    {expired && <p role="alert">This recording has expired. Safe cleanup must finish before another recording can be saved.</p>}
+    <p>Choose an existing video of the whole frame {frame.frame_number}.</p>
+    {processing && <p role="status">{status?.processing_status === 'completed' ? 'Your replay is ready.' : 'Creating replay…'} You can leave this screen. It will appear here after processing finishes.</p>}
+    {status?.processing_status === 'failed' && <p role="alert">We couldn’t create this replay. Cancel it below to choose another video.</p>}
+    {expired && <p role="alert">This recording has expired. Cancel it below to choose another video.</p>}
     {(!processing && !expired && status?.processing_status !== 'failed') && <>
       {!file && !busy && <label className="recording-file">Choose recording<input type="file" accept="video/mp4,.mp4" disabled={!!initial.error} onChange={e => void choose(e.target.files?.[0])} /></label>}
       {preview && <>
         <video ref={video} src={preview} hidden playsInline preload="auto" onLoadedData={capture} onError={() => setError('This browser cannot play the selected video. Export a compatible MP4.')} />
-        <p className="annotation">Tap the four corners of the pool table in order. This helps Pule identify shots and create your replay.</p>
+        <p className="annotation">Tap the four corners of the playing surface, going around the table clockwise or anticlockwise. Pule uses these to identify shots. Use Undo if you miss a corner.</p>
         <div className="recording-table" hidden={!marked}>
           <canvas ref={canvas} />
           {geometry && <svg viewBox={`0 0 ${displaySize(geometry).width} ${displaySize(geometry).height}`} aria-label="Table corner selection" role="img" preserveAspectRatio="none" onPointerDown={e => {
@@ -171,13 +175,14 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
             setPoints(p => [...p, pointerToDisplay(e.clientX, e.clientY, rect, geometry)])
           }}><polygon points={points.map(p => p.join(',')).join(' ')} />{points.map((p, i) => <g key={i}><circle cx={p[0]} cy={p[1]} r={displaySize(geometry).width / 35} /><text x={p[0]} y={p[1]} fontSize={displaySize(geometry).width / 28} textAnchor="middle" dominantBaseline="central">{i + 1}</text></g>)}</svg>}
         </div>
-        {marked && <><p>{points.length} of 4 corners selected.{points.length === 4 && !valid && ' These corners cannot be processed. Select four distinct corners inside the video, without crossing edges.'}</p><div className="connected-actions"><button type="button" className="text-button" disabled={!!busy || points.length >= 4} onClick={() => { if (geometry) setPoints(p => [...p, [displaySize(geometry).width / 2, displaySize(geometry).height / 2]]) }}>Add corner at center</button><button type="button" className="text-button" disabled={!!busy || !points.length} onClick={() => setPoints(p => p.slice(0, -1))}>Undo corner</button><button type="button" className="text-button" disabled={!!busy} onClick={() => setPoints([])}>Reset corners</button></div>
+        {marked && <><p>{points.length} of 4 corners selected.{points.length === 4 && !valid && ' These corners cannot be processed. Select four distinct corners inside the video, without crossing edges.'}</p><div className="connected-actions"><button type="button" className="text-button" disabled={!!busy || !points.length} onClick={() => setPoints(p => p.slice(0, -1))}>Undo corner</button><button type="button" className="text-button" disabled={!!busy} onClick={() => setPoints([])}>Reset corners</button></div>
         </>}
       </>}
-      <button type="button" className="button" disabled={!!busy || !file || !marked || !valid || !!initial.error} onClick={() => void start()}>Save &amp; Create Replay</button>
+      <button type="button" className="button" disabled={!!busy || removing || !file || !marked || !valid || !!initial.error} onClick={() => void start()}>Save &amp; Create Replay</button>
     </>}
     {busy && <div role="status"><p>{busy === 'Saving replay' ? 'Saving replay… Keep this screen open.' : 'Checking recording…'}</p><progress value={progress} max={100} aria-label={busy} /></div>}
     {(file || draft || status) && <button type="button" className="text-button" disabled={removing || !!initial.error} onClick={() => void remove()}>{removing ? 'Cancelling…' : status?.processing_status ? 'Cancel Replay' : 'Cancel Upload'}</button>}
+    {confirmCancel && <Modal title="Cancel replay?" onClose={() => setConfirmCancel(false)}><div className="replay-confirm"><p>Your frame result, match history and statistics will stay unchanged. You can choose another video after cancelling.</p><p className="annotation">Stored files will be cleared safely in the background.</p><div className="connected-actions"><button type="button" className="button button-secondary" onClick={() => setConfirmCancel(false)}>Keep replay</button><button type="button" className="button removal-confirm" onClick={() => void remove(true)}>Cancel replay</button></div></div></Modal>}
     {error && <p role="alert" className="connected-error">{error}</p>}
   </section>
 }

@@ -1,4 +1,5 @@
 export type IconName =
+  | 'video'
   | 'arrow'
   | 'back'
   | 'play'
@@ -17,6 +18,7 @@ export type IconName =
   | 'trophy'
   | 'share'
 const paths: Record<IconName, string> = {
+  video: 'M3 6h12v12H3z M15 10l6-4v12l-6-4',
   arrow: 'M5 12h14m-6-6 6 6-6 6',
   back: 'M19 12H5m6-6-6 6 6 6',
   play: 'm9 5 11 7-11 7V5Z',

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Icon } from '../../components/ui/Icon'
 import { Modal } from '../../components/ui/Primitives'
 import type { FrameReplay, SavedFrame } from '../../data/remote/database.types'
 import { RecordingUploadAction } from '../replays/RecordingUpload'
@@ -8,12 +9,13 @@ import { listFrameReplays, signFrameReplay } from '../../data/remote/replayServi
 type Playback = { frame: SavedFrame; url?: string; error?: string }
 export function FrameReplays({ userId, sessionId, children, upload }: {
   upload?: { playerId: string | null; detailEligible: boolean }
-  userId: string; sessionId: string; children: (action: (frame: SavedFrame) => ReactNode) => ReactNode
+  userId: string; sessionId: string; children: (action: (frame: SavedFrame) => ReactNode, replayCount: number) => ReactNode
 }) {
   const [replays, setReplays] = useState<FrameReplay[]>([])
   const [availability, setAvailability] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [attempt, setAttempt] = useState(0)
   const [playback, setPlayback] = useState<Playback | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<SavedFrame | null>(null)
   const [removing, setRemoving] = useState(false)
   const [removalMessage, setRemovalMessage] = useState('')
   const request = useRef(0)
@@ -43,12 +45,12 @@ export function FrameReplays({ userId, sessionId, children, upload }: {
   }
   async function remove(frame: SavedFrame) {
     const replay = replays.find(r => r.frame_id === frame.id)
-    if (!replay || removing || !window.confirm('Delete this replay? New playback access will stop and its files will be removed by safe cleanup.')) return
+    if (!replay || removing) return
     setRemoving(true); setRemovalMessage('')
     try {
       await removeFrameReplay(userId, frame.id, { path: replay.storage_path })
-      close(); setReplays(rows => rows.filter(r => r.storage_path !== replay.storage_path)); setAttempt(n => n + 1)
-      setRemovalMessage('Replay removed. File cleanup is pending; you can create a new replay.')
+      setConfirmDelete(null); close(); setReplays(rows => rows.filter(r => r.storage_path !== replay.storage_path)); setAttempt(n => n + 1)
+      setRemovalMessage('Replay video removed. Stored files will be cleared safely. Your frame result is unchanged.')
     } catch (reason) { setRemovalMessage(reason instanceof Error ? reason.message : 'Replay deletion could not be confirmed.') }
     finally { setRemoving(false) }
   }
@@ -57,15 +59,21 @@ export function FrameReplays({ userId, sessionId, children, upload }: {
     {availability === 'loading' && <p role="status" className="annotation">Checking replays…</p>}
     {availability === 'failed' && <p role="alert" className="annotation">Replay availability could not be checked. <button type="button" className="text-button" onClick={() => { setAvailability('loading'); setAttempt(n => n + 1) }}>Check replays again</button></p>}
     {children(frame => availability === 'ready' && replays.some(r => r.frame_id === frame.id && r.group_id === frame.group_id)
-      ? <><button type="button" className="text-button watch-replay" aria-label={`Watch Replay for frame ${frame.frame_number}`} onClick={() => void watch(frame)}>Watch Replay</button>{upload?.detailEligible && frame.detail_eligible && frame.participants.some(p => p.player_id === upload.playerId) && <button type="button" className="text-button" disabled={removing} onClick={() => void remove(frame)}>Delete Replay</button>}</> : availability === 'ready' && import.meta.env?.VITE_FRAME_RECORDING_UPLOADS === 'true' && upload?.detailEligible && frame.detail_eligible && frame.status === 'completed' && frame.participants.some(p => p.player_id === upload.playerId)
-        ? <RecordingUploadAction userId={userId} frame={frame} onPublished={() => setAttempt(n => n + 1)} /> : null)}
+      ? <button type="button" className="text-button watch-replay replay-video" aria-label={`Watch Replay for frame ${frame.frame_number}`} title="Watch Replay" onClick={() => void watch(frame)}><Icon name="video" /></button> : availability === 'ready' && import.meta.env?.VITE_FRAME_RECORDING_UPLOADS === 'true' && upload?.detailEligible && frame.detail_eligible && frame.status === 'completed' && frame.participants.some(p => p.player_id === upload.playerId)
+        ? <RecordingUploadAction userId={userId} frame={frame} onPublished={() => setAttempt(n => n + 1)} /> : null, replays.length)}
     {playback && <Modal title={`Frame ${playback.frame.frame_number} replay`} onClose={close}>
       <div className="replay-player">
         {!playback.url && !playback.error && <p role="status">Opening replay…</p>}
         {playback.url && <video key={playback.url} src={playback.url} controls playsInline preload="metadata" aria-label={`Frame ${playback.frame.frame_number} replay`}
           onError={() => setPlayback({ frame: playback.frame, error: 'Playback failed or this link has expired. Open a fresh replay link to try again.' })} />}
         {playback.error && <><p role="alert">{playback.error}</p><button type="button" className="button" onClick={() => void watch(playback.frame)}>Open fresh replay link</button></>}
+        {upload?.detailEligible && playback.frame.detail_eligible && playback.frame.participants.some(p => p.player_id === upload.playerId) && <button type="button" className="text-button replay-delete" onClick={() => { setRemovalMessage(''); setConfirmDelete(playback.frame) }}>Delete Replay video</button>}
       </div>
+    </Modal>}
+    {confirmDelete && <Modal title="Delete replay video?" onClose={() => { if (!removing) setConfirmDelete(null) }}>
+      <div className="replay-confirm"><p>This deletes the video only. The frame result, match history and statistics are unaffected.</p><p className="annotation">Stored files are removed safely in the background.</p>
+      <div className="connected-actions"><button className="button button-secondary" disabled={removing} onClick={() => setConfirmDelete(null)}>Keep replay</button><button className="button removal-confirm" disabled={removing} onClick={() => void remove(confirmDelete)}>{removing ? 'Deleting…' : 'Delete video'}</button></div>
+      {removalMessage && <p role="alert">{removalMessage}</p>}</div>
     </Modal>}
   </>
 }

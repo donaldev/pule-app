@@ -4,6 +4,7 @@ const MyStatsView = lazy(() => import('../stats/MyStatsView').then(m => ({defaul
 import { PageHeading } from '../../components/ui/Primitives'
 import { Icon } from '../../components/ui/Icon'
 import type { SessionState } from '../../data/remote/database.types'
+import { listFrameReplays } from '../../data/remote/replayService'
 import { getSessionState } from '../../data/remote/scoringService'
 import type { ConnectedGame } from '../connected/useConnectedGame'
 import { MatchContext } from '../connected/MatchContext'
@@ -49,9 +50,15 @@ function useNightResults(game:ConnectedGame, enabled:boolean) {
   return {states:scoped,loading:loading || (enabled && scoped.length+failures.length<game.sessions.length),failures,retry:()=>setRetry(x=>x+1)}
 }
 function NightCard({state,game}:{state:SessionState;game:ConnectedGame}){
+  const [replayCount, setReplayCount] = useState(0)
+  useEffect(() => {
+    let alive = true
+    listFrameReplays(game.userId, state.session.id).then(rows => { if (alive) setReplayCount(rows.length) }).catch(() => {})
+    return () => { alive = false }
+  }, [game.userId, state.session.id])
   const active=state.session.status==='active'
   const pair=state.participants.length===2
-  return <a className={`night-result-card ${pair?'pair-result':''} ${nightOutcome(state)==='Draw'?'draw-result':''}`} href={`#/session/${state.session.id}`} aria-label={`Open match: ${state.participants.map(p=>`${p.display_name} ${state.scores[p.player_id] ?? 'score not recorded'}`).join(' and ')}, ${nightOutcome(state)}, ${displayDate(state.session.occurred_on)}`}>
+  return <a className={`night-result-card ${pair?'pair-result':''} ${nightOutcome(state)==='Draw'?'draw-result':''}`} href={`#/session/${state.session.id}`} aria-label={`Open match: ${state.participants.map(p=>`${p.display_name} ${state.scores[p.player_id] ?? 'score not recorded'}`).join(' and ')}, ${nightOutcome(state)}, ${displayDate(state.session.occurred_on)}`}>{replayCount > 0 && <span className="replay-count" aria-label={`${replayCount} playable replays`}><Icon name="video" size={18} /> {replayCount}</span>}
     <div className="night-scorelines">{state.participants.map(p=><div key={p.player_id} className={state.session.status==='finalized' && Object.values(state.scores).filter(s=>s===state.scores[p.player_id]).length===1 && state.scores[p.player_id]===Math.max(...Object.values(state.scores).filter((s):s is number=>s!==null)) ? 'result-winner' : ''}><strong>{p.display_name}</strong><span>{state.scores[p.player_id] ?? '—'}</span></div>)}</div>
     <div className="night-result-meta"><span className={active?'result-badge active-night':'result-badge'}>{active?'In progress':nightOutcome(state)}</span><span>{displayDate(state.session.occurred_on)}</span></div>
     <div className="night-result-footer"><span>{game.options?.venues.find(v=>v.id===state.session.venue_id)?.display_name ?? 'Venue not recorded'}</span><span>{active?'Resume match':state.session.record_kind==='result_only'?'View result':'View match'} <Icon name="arrow" /></span></div>
