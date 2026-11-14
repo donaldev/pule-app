@@ -23,6 +23,7 @@ export interface ReplayUploadStatus {
  processing_status?: 'uploaded' | 'queued' | 'processing' | 'completed' | 'failed' | null
  retain_until?: string | null; attempts?: number | null; failure_code?: string | null
 }
+export interface FrameRecordingState { frame_id: UUID; state: 'uploading' | 'processing' | 'cleanup'; owned: boolean; failed: boolean }
 export interface FrameReplay { frame_id: UUID; group_id: UUID; session_id: UUID; storage_path: string; created_at: string }
 export interface FrameParticipant { player_id: UUID; side: 1 | 2; foul_count: number | null }
 export interface SavedFrame {
@@ -61,6 +62,7 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      get_session_frame_recordings: { Args: {p_session:UUID};Returns:FrameRecordingState[] }
       get_my_frame_recording: { Args: {p_frame:UUID};Returns:ReplayUploadStatus | null }
       remove_frame_replay: { Args: {p_frame:UUID;p_upload?:UUID;p_operation?:UUID;p_path?:string};Returns:undefined }
       reserve_frame_replay_upload: { Args: {p_operation:UUID;p_frame:UUID;p_bytes:number;p_content_type?:string};Returns:ReplayUploadStatus }

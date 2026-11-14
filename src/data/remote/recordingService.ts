@@ -1,7 +1,7 @@
 import { r2Command, r2RecordingEnabled, transferR2Recording } from './r2Recording'
 import { Upload } from 'tus-js-client'
 import { actorAuthorization, getSupabase } from './supabase'
-import type { Database, ReplayUploadStatus } from './database.types'
+import type { Database, FrameRecordingState, ReplayUploadStatus } from './database.types'
 import type { Point } from '../../features/replays/recordingGeometry'
 
 type Commands = 'reserve_frame_replay_upload' | 'finalize_frame_replay_upload' | 'get_my_frame_replay_upload' | 'queue_frame_replay_processing'
@@ -94,4 +94,14 @@ export async function getFrameRecording(userId: string, frameId: string): Promis
   if (error) throw Error('Could not check this frame’s recording.')
   await actorAuthorization(userId)
   return data === null ? null : validateUploadStatus(data)
+}
+
+/** Participant-authorized match summary; no media paths or another actor's capabilities. */
+export async function listFrameRecordings(userId: string, sessionId: string): Promise<FrameRecordingState[]> {
+  const authorization = await actorAuthorization(userId)
+  const { data, error } = await getSupabase().rpc('get_session_frame_recordings', { p_session: sessionId })
+    .setHeader('Authorization', authorization).retry(false).abortSignal(AbortSignal.timeout(20_000))
+  if (error || !Array.isArray(data) || data.some(r => !r || typeof r.frame_id !== 'string' || !['uploading', 'processing', 'cleanup'].includes(r.state) || typeof r.owned !== 'boolean' || typeof r.failed !== 'boolean')) throw Error('Could not check recording availability.')
+  await actorAuthorization(userId)
+  return data
 }

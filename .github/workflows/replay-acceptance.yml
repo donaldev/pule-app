@@ -1,6 +1,8 @@
 name: Replay acceptance test
 
 on:
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       operation:
@@ -31,12 +33,17 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        if: github.event_name != 'schedule'
         with:
           python-version: '3.12'
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
+      - name: Install scheduled cleanup dependencies
+        if: github.event_name == 'schedule'
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
       - name: Prepare existing worker
+        if: github.event_name != 'schedule'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1
@@ -44,6 +51,7 @@ jobs:
           npm ci --omit=dev --ignore-scripts --no-audit --no-fund
           python replay-worker/replay_worker.py --check
       - name: Verify worker credentials without claiming work
+        if: github.event_name != 'schedule'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -80,7 +88,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python replay-worker/replay_worker.py
       - name: Run one bounded cleanup pass
-        if: always() && (inputs.operation == 'process-one' || inputs.operation == 'cleanup-only')
+        if: always() && (github.event_name == 'schedule' || inputs.operation == 'process-one' || inputs.operation == 'cleanup-only')
         timeout-minutes: 3
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}

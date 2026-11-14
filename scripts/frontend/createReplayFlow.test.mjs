@@ -35,7 +35,7 @@ function component({initial=null,rotation=0,status=null}={}){
  const render=()=>{h.cursor=0;h.effects=[];return RecordingUpload({userId:actor,frame:{id:frame,frame_number:1},onPublished:()=>h.calls.push(['published'])})}
  return render
 }
-test('one save uploads, finalizes and queues; failures retain the same operation and stop safely',async()=>{
+test('double-click reserves, transfers and queues once; ambiguous failures preserve the same operation',async()=>{
  const originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL
  URL.createObjectURL=()=> 'blob:local-preview';URL.revokeObjectURL=()=>{}
  try {
@@ -48,14 +48,14 @@ test('one save uploads, finalizes and queues; failures retain the same operation
    }
    if(failure)h[failure]=true
    assert.equal(button(tree,'Save & Create Replay').props.disabled,false)
-   button(tree,'Save & Create Replay').props.onClick();await tick();tree=render()
+   button(tree,'Save & Create Replay').props.onClick();button(tree,'Save & Create Replay').props.onClick();await tick();tree=render()
    const sequence=h.calls.filter(c=>!['persist','published'].includes(c[0])).map(c=>c[0])
    assert.deepEqual(sequence,failure==='interrupted'?['reserve','transfer']:failure==='finalizeFailed'?['reserve','transfer','finalize']:['reserve','transfer','finalize','queue'])
    assert.ok(h.calls.findIndex(c=>c[0]==='persist')<h.calls.findIndex(c=>c[0]==='reserve'))
    const operations=h.calls.filter(c=>c[0]==='persist').map(c=>c[1].operation)
    assert.equal(new Set(operations).size,1)
    if(failure){assert.ok(find(tree,n=>n.props.role==='alert'));assert.equal(button(tree,'Save & Create Replay').props.disabled,false)}
-   else {assert.match(JSON.stringify(tree),/Creating replay/);const queue=h.calls.find(c=>c[0]==='queue');assert.equal(validCorners(queue[3],640,480),true)}
+   else {assert.match(JSON.stringify(tree),/Processing replay/);const queue=h.calls.find(c=>c[0]==='queue');assert.equal(validCorners(queue[3],640,480),true)}
   }
  } finally {URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke}
 })

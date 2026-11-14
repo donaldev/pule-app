@@ -88,6 +88,9 @@ update private.frame_replay_uploads set created_at=clock_timestamp()-interval '3
 select app.claim_frame_replay_cleanup();
 select test.ok(exists(select 1 from private.frame_replay_cleanup where bucket_id='pule-frame-recordings' and upload_id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=3)),'expired upload has durable R2 cleanup work');
 select test.ok((select status='cleanup' from private.frame_replay_uploads where id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=3)),'expired reservation cannot obtain new permissions');
+-- Advance synthetic time past the source-write quiescence barrier.
+update private.frame_replay_cleanup set due_at=clock_timestamp()-interval '1 second' where upload_id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=3);
+select app.claim_frame_replay_cleanup();
 select app.finish_frame_replay_cleanup(bucket_id,storage_path,lease_id,true) from private.frame_replay_cleanup where bucket_id='pule-frame-recordings' and lease_id is not null;
 select test.ok((select status='cleaned' from private.frame_replay_uploads where id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=3)),'attested abort/object absence releases expired R2 quota');
 -- Preserve canonical Phase 1 metadata and historical null timestamps.

@@ -57,6 +57,13 @@ reset role;
 set role service_role;
 select test.ok(app.claim_r2_frame_replay_processing() is null,'cancelled queued work cannot be claimed');
 reset role;
+-- Cancellation now protects the slot until its exact cleanup is acknowledged.
+reset role;
+update private.frame_replay_cleanup set due_at=clock_timestamp()-interval '1 second';
+set role service_role;
+insert into test.cleanup_leases select app.claim_frame_replay_cleanup();
+select app.finish_frame_replay_cleanup(x->>'bucket',x->>'storage_path',(x->>'lease_id')::uuid,true)
+from test.cleanup_leases,jsonb_array_elements(answer) x;
 set role authenticated;
 insert into test.upload_reservations select 2,app.reserve_r2_frame_recording(gen_random_uuid(),frame_id,100,repeat('b',64)) from test.upload_cases where n=1;
 reset role;

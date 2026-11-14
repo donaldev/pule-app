@@ -19,7 +19,7 @@ export function RecordingUploadAction({ userId, frame, onPublished }: { userId: 
     return () => { active = false }
   }, [userId, frame.id])
   return <>
-    {!checked ? <p role="status">Checking recording…</p> : checkError ? <p role="alert">Recording availability couldn’t be checked. Close and reopen these details to try again.</p> : pending ? <button type="button" className="text-button replay-pending" onClick={() => setShowPending(true)}>{pending.processing_status === 'failed' ? 'Replay failed' : pending.processing_status === 'queued' || pending.processing_status === 'processing' ? 'Creating replay…' : 'Recording not finished'}</button>
+    {!checked ? <p role="status">Checking recording…</p> : checkError ? <p role="alert">Recording availability couldn’t be checked. Close and reopen these details to try again.</p> : pending ? <button type="button" className="text-button replay-pending" onClick={() => setShowPending(true)}>{pending.status === 'cleanup' || pending.processing_status === 'failed' ? 'Removing recording…' : pending.status === 'reserved' ? 'Uploading' : 'Processing replay'}</button>
       : <button type="button" className="button frame-recording-action" onClick={() => picker.current?.click()}><Icon name="upload" /><span>Add recording</span></button>}
     <input ref={picker} type="file" accept="video/mp4,.mp4" hidden aria-label="Choose frame recording" onChange={e => { const file = e.target.files?.[0]; if (file) { setSelected(file) }; e.target.value = '' }} />
     {(selected || showPending) && <Modal title={`Create replay · Frame ${frame.frame_number}`} onClose={() => { setSelected(null); setShowPending(false); void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }}>
@@ -66,7 +66,22 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
         if (!lock) throw Error('This recording is open in another tab. Pause it there first.')
         await task()
       })
-    } catch (reason) { console.error('Replay save failed', reason); if (alive.current) setError(reason instanceof Error ? reason.message : 'Couldn’t save your video. Keep it selected and try again.') }
+    } catch (reason) {
+      console.error('Replay save failed', reason)
+      if (alive.current) {
+        setError(reason instanceof Error ? reason.message : 'Couldn’t save your video. Check its status before trying again.')
+        // A lost response is not proof of failure. Only reflect server-confirmed retirement.
+        try {
+          const saved = readRecording(key, userId, frame.id)
+          if (saved?.uploadId) {
+            const current = await getRecordingStatus(userId, saved.uploadId)
+            if (alive.current && ['cleanup', 'cleaned'].includes(current.status)) {
+              setStatus(current); setError('This recording failed. Removing its video before another upload.'); onPublished()
+            }
+          }
+        } catch { /* Keep the same operation protected when its status is unknown. */ }
+      }
+    }
     finally { locked.current = false; if (alive.current) { setBusy(''); setCheckedAt(Date.now()) } }
   }
   async function choose(chosen?: File) {
@@ -142,7 +157,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
         if (current.processing_status === 'completed') onPublished()
         return
       }
-      if (current.processing_status === 'failed') throw Error('Replay processing failed. Your saved recording has been retained; it was not uploaded again.')
+      if (current.processing_status === 'failed') throw Error('This recording failed. A new upload will be available after its video is safely removed.')
       if (current.status === 'reserved') {
         if (Date.parse(current.expires_at) <= Date.now()) throw Error('This recording has expired. It must finish safe cleanup before another recording can be saved.')
         if (!saved.transferred) {
@@ -159,9 +174,9 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   }
   return <section className="recording-upload" aria-label="Frame recording upload">
     <p>Choose an existing video of the whole frame {frame.frame_number}.</p>
-    {processing && <p role="status">{status?.processing_status === 'completed' ? 'Your replay is ready.' : 'Creating replay…'} You can leave this screen. It will appear here after processing finishes.</p>}
-    {status?.processing_status === 'failed' && <p role="alert">We couldn’t create this replay. Cancel it below to choose another video.</p>}
-    {expired && <p role="alert">This recording has expired. Cancel it below to choose another video.</p>}
+    {processing && <p role="status">{status?.processing_status === 'completed' ? 'Your replay is ready.' : 'Processing replay…'} You can leave this screen. It will appear here after processing finishes.</p>}
+    {status?.processing_status === 'failed' && <p role="alert">We couldn’t create this replay. Removing its video before you upload again.</p>}
+    {expired && <p role="alert">This recording is no longer active. A new upload will be available after safe removal.</p>}
     {(!processing && !expired && status?.processing_status !== 'failed') && <>
       {!file && !busy && <label className="recording-file">Choose recording<input type="file" accept="video/mp4,.mp4" disabled={!!initial.error} onChange={e => void choose(e.target.files?.[0])} /></label>}
       {preview && <>
@@ -180,8 +195,8 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       </>}
       <button type="button" className="button" disabled={!!busy || removing || !file || !marked || !valid || !!initial.error} onClick={() => void start()}>Save &amp; Create Replay</button>
     </>}
-    {busy && <div role="status"><p>{busy === 'Saving replay' ? 'Saving replay… Keep this screen open.' : 'Checking recording…'}</p><progress value={progress} max={100} aria-label={busy} /></div>}
-    {(file || draft || status) && <button type="button" className="text-button" disabled={removing || !!initial.error} onClick={() => void remove()}>{removing ? 'Cancelling…' : status?.processing_status ? 'Cancel Replay' : 'Cancel Upload'}</button>}
+    {busy && <div role="status"><p>{busy === 'Saving replay' ? 'Uploading… Keep this screen open.' : 'Checking recording…'}</p><progress value={progress} max={100} aria-label={busy} /></div>}
+    {(file || draft || status) && status?.status !== 'cleanup' && status?.status !== 'cleaned' && status?.processing_status !== 'failed' && <button type="button" className="text-button" disabled={removing || !!initial.error} onClick={() => void remove()}>{removing ? 'Cancelling…' : status?.processing_status ? 'Cancel Replay' : 'Cancel Upload'}</button>}
     {confirmCancel && <Modal title={`Cancel replay for Frame ${frame.frame_number}?`} onClose={() => setConfirmCancel(false)}><div className="replay-confirm"><p>Your frame result and statistics stay unchanged.</p><div className="connected-actions"><button type="button" className="button button-secondary" onClick={() => setConfirmCancel(false)}>Keep replay</button><button type="button" className="button removal-confirm" onClick={() => void remove(true)}>Cancel replay</button></div></div></Modal>}
     {error && <p role="alert" className="connected-error">{error}</p>}
   </section>

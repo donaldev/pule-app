@@ -44,9 +44,13 @@ export function recordingHandler(makeClient = createClient, makeR2 = recordingR2
       if (u.source_provider !== 'r2' || !SOURCE_KEY.test(u.storage_path) || u.storage_path !== `${u.session_id}/${u.frame_id}/${u.upload_id}.mp4` || u.upload_id !== body.upload || !SHA256.test(u.source_sha256) || !Number.isSafeInteger(u.expected_bytes) || u.expected_bytes < 1 || u.expected_bytes > MAX_SOURCE_BYTES) throw Error('Invalid source identity')
       if (u.status === 'committed') return response(body.action === 'complete' ? u : { status: u, completed: true, parts: [], partBytes: PART_BYTES })
       const head = await r2.head(u.storage_path)
+      const terminalFailure = async message => {
+        await rpc(service, 'fail_frame_recording_upload', { p_upload: u.upload_id, p_actor: user.user.id })
+        throw Error(message)
+      }
       const verify = h => h && h.bytes === u.expected_bytes && h.type === 'video/mp4' && h.upload === u.upload_id && h.actor === user.user.id && h.sha256 === u.source_sha256 && typeof h.etag === 'string'
       if (head) {
-        if (!verify(head)) throw Error('Stored source does not match reservation')
+        if (!verify(head)) await terminalFailure('Stored source does not match reservation')
         if (body.action !== 'complete') return response({ status: u, completed: true, parts: [], partBytes: PART_BYTES })
       } else {
         if (!u.multipart_id) {
@@ -66,7 +70,7 @@ export function recordingHandler(makeClient = createClient, makeR2 = recordingR2
         const parts = await r2.parts(u.storage_path, u.multipart_id)
         const seen = new Set()
         for (const p of parts) {
-          if (!Number.isInteger(p.number) || p.number < 1 || p.number > count || p.bytes !== size(p.number) || seen.has(p.number)) throw Error('Part lengths do not match reservation')
+          if (!Number.isInteger(p.number) || p.number < 1 || p.number > count || p.bytes !== size(p.number) || seen.has(p.number)) await terminalFailure('Part lengths do not match reservation')
           seen.add(p.number)
         }
         if (body.action === 'state') return response({ status: u, completed: false, parts: [...seen], partBytes: PART_BYTES })
@@ -74,7 +78,10 @@ export function recordingHandler(makeClient = createClient, makeR2 = recordingR2
         await r2.complete(u.storage_path, u.multipart_id, parts.sort((a, b) => a.number - b.number))
       }
       const verified = await r2.head(u.storage_path)
-      if (!verify(verified)) throw Error('Completed object could not be verified')
+      if (!verify(verified)) {
+        if (verified) await terminalFailure('Completed source does not match reservation')
+        throw Error('Completed object could not be verified')
+      }
       const status = await rpc(service, 'confirm_r2_frame_recording', { p_upload: u.upload_id, p_actor: user.user.id, p_bytes: verified.bytes, p_type: verified.type, p_sha256: verified.sha256, p_etag: verified.etag })
       return response(status)
     } catch (error) {

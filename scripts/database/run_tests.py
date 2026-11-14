@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sql-test', choices=['replay_cancellation.sql','r2_frame_recordings.sql','frame_replay_processing.sql','frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
+    parser.add_argument('--sql-test', choices=['replay_lifecycle.sql','replay_cancellation.sql','r2_frame_recordings.sql','frame_replay_processing.sql','frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
     parser.add_argument('--atomic-replay-release', action='store_true', help='Apply the generated atomic replay release bundle locally')
     parser.add_argument('--port', type=int, default=55439)
     parser.add_argument('--upgrade-foundation', action='store_true', help='Seed original two migrations, then upgrade existing synthetic history')
@@ -84,14 +84,16 @@ def main():
             file(ROOT/'supabase/tests/fixtures.sql')
         if args.sql_test:
             file(ROOT/'supabase/tests'/args.sql_test)
-            if args.sql_test == 'r2_frame_recordings.sql':
-                sql("select test.ok(true,'existing pre-R2 reservation identity and every original field preserved')")
+            if args.sql_test in ('r2_frame_recordings.sql', 'replay_lifecycle.sql'):
+                if args.sql_test == 'r2_frame_recordings.sql':
+                    sql("select test.ok(true,'existing pre-R2 reservation identity and every original field preserved')")
                 def r2_claim(_):
                     return json.loads(sql("set role service_role; select coalesce(app.claim_r2_frame_replay_processing(),'null'::jsonb)").splitlines()[-1])
-                with ThreadPoolExecutor(max_workers=2) as pool:
-                    claims = list(pool.map(r2_claim, range(2)))
-                assert sum(x is not None for x in claims) == 1
-                sql("select test.ok(true,'independent R2 workers claim one job')")
+                if args.sql_test == 'r2_frame_recordings.sql':
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        claims = list(pool.map(r2_claim, range(2)))
+                    assert sum(x is not None for x in claims) == 1
+                    sql("select test.ok(true,'independent R2 workers claim one job')")
                 def r2_reserve(actor):
                     try:
                         sql("set role authenticated; set request.jwt.claim.sub='20000000-0000-0000-0000-00000000000%d'; select app.reserve_r2_frame_recording(gen_random_uuid(),(select frame_id from test.upload_cases where n=5),100,repeat('a',64))" % actor)

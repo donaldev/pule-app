@@ -9,7 +9,7 @@ const React={createElement:(type,props,...children)=>({type,props:props??{},chil
 const Icon='Icon',Modal='Modal',MatchDisclosureHeading='Disclosure',RecordingUploadAction='RecordingUploadAction';
 const useState=initial=>{const h=globalThis.archive,i=h.cursor++;if(!(i in h.states))h.states[i]=typeof initial==='function'?initial():initial;return [h.states[i],next=>h.states[i]=typeof next==='function'?next(h.states[i]):next]};
 const useRef=initial=>{const h=globalThis.archive,i=h.cursor++;return h.states[i]??(h.states[i]={current:initial})};const useEffect=()=>{};
-const listFrameReplays=async()=>[];const signFrameReplay=async(user,replay)=>{globalThis.archive.signed.push([user,replay.frame_id]);if(globalThis.archive.signError)throw Error('offline');return 'https://private.test/signed'};
+const listFrameRecordings=async()=>[];const listFrameReplays=async()=>[];const signFrameReplay=async(user,replay)=>{globalThis.archive.signed.push([user,replay.frame_id]);if(globalThis.archive.signError)throw Error('offline');return 'https://private.test/signed'};
 const removeFrameReplay=async(...args)=>{globalThis.archive.removed.push(args);if(globalThis.archive.removeError)throw Error('Removal unconfirmed')};
 `
 const compiled = ts.transpileModule(prelude + source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022, jsx: ts.JsxEmit.React } }).outputText
@@ -20,10 +20,10 @@ const nodes = tree => Array.isArray(tree) ? tree.flatMap(nodes) : tree && typeof
 const find = (tree, predicate) => nodes(tree).find(predicate)
 const button = (tree, label) => find(tree, n => n.type === 'button' && nodes(n).some(child => child.children.includes(label)))
 const tick = () => new Promise(resolve => setImmediate(resolve))
-function setup(rows, count=1, authorized=true) {
+function setup(rows, count=1, authorized=true, includeArchive=false) {
  globalThis.archive={states:[rows,'ready',0,null,null,false,'',null],cursor:0,signed:[],removed:[]}
  const frames=Array.from({length:count},(_,i)=>frame(i+1))
- return () => { archive.cursor=0;return FrameReplays({userId:'account',sessionId:'session',upload:{playerId:authorized?'player':'viewer',detailEligible:true},describeFrame:()=> 'Donal won · 1:14',children:(action,total)=>({type:'history',props:{total},children:frames.map(f=>({type:'frame',props:{id:f.id},children:[action(f),action(f,'details')]}))})}) }
+ return () => { archive.cursor=0;return FrameReplays({userId:'account',sessionId:'session',archiveFrames:includeArchive?frames:undefined,upload:{playerId:authorized?'player':'viewer',detailEligible:true},describeFrame:()=> 'Donal won · 1:14',children:(action,total)=>({type:'history',props:{total},children:frames.map(f=>({type:'frame',props:{id:f.id},children:[action(f),action(f,'details')]}))})}) }
 }
 test('empty, one and 40-frame archives count only loaded published replays; add stays in details',()=>{
  for(const count of [0,1,40]) {
@@ -123,4 +123,24 @@ test('frame outcomes use only linked participant UUIDs; tied match scores never 
  for(const identity of [null,undefined,'viewer'])assert.equal(frameOutcome(saved,identity),'neutral')
  assert.equal(frameOutcome({...saved,winner_id:null},'player'),'neutral')
  assert.equal(frameOutcome({...saved,status:'voided'},'player'),'neutral')
+})
+
+test('active recordings from either participant block picker entries and show current lifecycle',()=>{
+ const render=setup([],4,true,true)
+ // Existing hook slots stay stable; lifecycle summary follows the frame selector state.
+ render();archive.states[14]=[
+  {frame_id:'frame-1',state:'uploading',owned:false,failed:false},
+  {frame_id:'frame-2',state:'processing',owned:false,failed:false},
+  {frame_id:'frame-3',state:'cleanup',owned:true,failed:true},
+ ]
+ let tree=render()
+ assert.equal(nodes(tree).filter(n=>n.type==='RecordingUploadAction').length,1)
+ assert.match(JSON.stringify(tree),/Uploading/)
+ assert.match(JSON.stringify(tree),/Processing replay/)
+ assert.match(JSON.stringify(tree),/Recording failed. Removing video/)
+ button(tree,'Add frame recording').props.onClick();tree=render()
+ assert.deepEqual(nodes(tree).filter(n=>n.type==='option'&&n.props.value).map(n=>n.props.value),['frame-4'])
+ archive.states[12]=false
+ archive.states[14]=[];tree=render()
+ assert.equal(nodes(tree).filter(n=>n.type==='RecordingUploadAction').length,4)
 })

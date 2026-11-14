@@ -82,7 +82,7 @@ select test.ok((select r.storage_path=l.answer->>'destination_key' from app.fram
 select test.ok(exists(select 1 from private.frame_replay_cleanup where bucket_id='frame-recordings'),'successful publication atomically schedules source cleanup');
 select test.ok(exists(select 1 from storage.objects where bucket_id='frame-recordings'),'publication does not SQL-delete Storage bytes');
 select test.denied(format('select app.fail_frame_replay_processing(%L,%L)',answer->>'job_id',answer->>'lease_id'),'55000','late failure cannot retire published output') from test.processing_leases where n=1;
--- Failed source stays private and can retry with a fresh output path/lease.
+-- Terminal failure retires the source; a fresh attempt waits for cleanup.
 set role authenticated;
 insert into test.upload_reservations select 2,app.reserve_frame_replay_upload(gen_random_uuid(),frame_id,100) from test.upload_cases where n=2;
 insert into storage.objects(bucket_id,name,owner_id,metadata) select 'frame-recordings',answer->>'storage_path',auth.uid()::text,'{"size":100,"mimetype":"video/mp4"}' from test.upload_reservations where n=2;
@@ -91,19 +91,12 @@ select app.queue_frame_replay_processing((answer->>'upload_id')::uuid,'[[20,20],
 reset role;
 insert into test.processing_leases select 2,app.claim_frame_replay_processing();
 select app.fail_frame_replay_processing((answer->>'job_id')::uuid,(answer->>'lease_id')::uuid) from test.processing_leases where n=2;
-select test.ok(not exists(select 1 from private.frame_replay_cleanup q join test.upload_reservations u on q.storage_path=u.answer->>'storage_path' where u.n=2 and q.bucket_id='frame-recordings'),'failed source retained for retry');
+select test.ok(exists(select 1 from private.frame_replay_cleanup q join test.upload_reservations u on q.storage_path=u.answer->>'storage_path' where u.n=2 and q.bucket_id='frame-recordings'),'failed source immediately enters durable cleanup');
 set role authenticated;
-select app.queue_frame_replay_processing((answer->>'upload_id')::uuid,'[[20,20],[620,20],[620,460],[20,460]]',640,480) from test.upload_reservations where n=2;
+select test.denied(format('select app.queue_frame_replay_processing(%L,%L,640,480)',answer->>'upload_id','[[20,20],[620,20],[620,460],[20,460]]'),'55000','terminal source cannot be requeued') from test.upload_reservations where n=2;
 reset role;
-insert into test.processing_leases select 3,app.claim_frame_replay_processing();
-select test.ok((select answer->>'destination_key' from test.processing_leases where n=2)<>(select answer->>'destination_key' from test.processing_leases where n=3),'retry assigns immutable new output path');
-select test.denied(format('select app.complete_frame_replay_processing(%L,%L,70,5,1)',answer->>'job_id',answer->>'lease_id'),'55000','stale worker cannot publish after retry') from test.processing_leases where n=2;
-update private.frame_replay_jobs set lease_until=clock_timestamp()-interval '1 minute' where upload_id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=2);
-select app.claim_frame_replay_processing();
-select test.ok((select state='failed' from private.frame_replay_jobs where upload_id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=2)),'expired lease becomes failed and retryable');
-update private.frame_replay_jobs set retain_until=clock_timestamp()-interval '1 minute' where upload_id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=2);
+select test.denied(format('select app.complete_frame_replay_processing(%L,%L,70,5,1)',answer->>'job_id',answer->>'lease_id'),'55000','failed worker cannot publish') from test.processing_leases where n=2;
 select app.claim_frame_replay_cleanup();
-select test.ok(exists(select 1 from private.frame_replay_cleanup q join test.upload_reservations u on q.storage_path=u.answer->>'storage_path' where u.n=2 and q.bucket_id='frame-recordings'),'failed source expires into durable cleanup');
 -- Early success acknowledgments cannot discard source bytes or queue state.
 select test.denied(format('select app.finish_frame_replay_cleanup(%L,%L,%L,true)',q.bucket_id,q.storage_path,q.lease_id),'55000','cleanup cannot acknowledge source still present')
 from private.frame_replay_cleanup q join test.upload_reservations u on q.storage_path=u.answer->>'storage_path' where q.bucket_id='frame-recordings' and u.n=1;
@@ -112,7 +105,7 @@ delete from storage.objects where bucket_id='frame-recordings' and name=(select 
 select app.finish_frame_replay_cleanup(q.bucket_id,q.storage_path,q.lease_id,true)
 from private.frame_replay_cleanup q join test.upload_reservations u on q.storage_path=u.answer->>'storage_path' where q.bucket_id='frame-recordings' and u.n=1;
 select test.ok(exists(select 1 from app.frame_replays where frame_id=(select frame_id from test.upload_cases where n=1)),'source cleanup preserves generated replay');
-select test.ok((select count(*)>=2 from private.frame_replay_cleanup where bucket_id='frame-replays' and upload_id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=2)),'retired output attempts remain associated with quota and cleanup');
+select test.ok((select count(*)>=1 from private.frame_replay_cleanup where bucket_id='frame-replays' and upload_id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=2)),'retired output attempts remain associated with quota and cleanup');
 -- Legacy canonical playback remains intact, including historical null timestamps.
 insert into app.frame_replays(frame_id,group_id,session_id,storage_path) select id,group_id,session_id,session_id::text||'/'||id::text||'.mp4' from app.frames where id='90000000-0000-0000-0000-000000000001';
 select test.ok((select started_at is null and completed_at is null from app.frames where id='90000000-0000-0000-0000-000000000001'),'historical frame timestamps unchanged');
@@ -123,6 +116,9 @@ insert into storage.objects(bucket_id,name,owner_id,metadata) select 'frame-reco
 reset role;
 insert into app.frame_replays(frame_id,group_id,session_id,storage_path) select frame_id,'10000000-0000-0000-0000-000000000001',session_id,session_id::text||'/'||frame_id::text||'.mp4' from test.upload_cases where n=4;
 update private.frame_replay_uploads set created_at=clock_timestamp()-interval '31 hours',expires_at=clock_timestamp()-interval '25 hours' where id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=4);
+select app.claim_frame_replay_cleanup();
+-- Advance only synthetic cleanup deadlines past the new quiescence barrier.
+update private.frame_replay_cleanup set due_at=clock_timestamp()-interval '1 second' where upload_id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=4);
 select app.claim_frame_replay_cleanup();
 delete from storage.objects where bucket_id='frame-recordings' and name=(select answer->>'storage_path' from test.upload_reservations where n=4);
 select app.finish_frame_replay_cleanup(q.bucket_id,q.storage_path,q.lease_id,true) from private.frame_replay_cleanup q where q.upload_id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=4);

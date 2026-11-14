@@ -158,3 +158,14 @@ test('mobile account changes abort active multipart writes', async()=>{
  }
  try{await assert.rejects(browser.transferR2Recording(new Blob([new Uint8Array(123)]),actor,{upload_id:upload,storage_path:key},()=>{}).start(),/interrupted/)}finally{globalThis.fetch=original}
 })
+
+test('verified terminal source corruption retires only that attempt through the trusted RPC',async()=>{
+ const h=setup();h.setParts([{number:1,bytes:PART_BYTES+1}])
+ assert.equal((await h.send({action:'complete',upload})).status,409)
+ const failure=h.calls.find(x=>x.name==='fail_frame_recording_upload')
+ assert.deepEqual(failure,{name:'fail_frame_recording_upload',args:{p_upload:upload,p_actor:actor},token:'private'})
+ assert.equal(h.calls.some(x=>x.r2==='complete'),false)
+ const interrupted=setup()
+ assert.equal((await interrupted.send({action:'complete',upload})).status,409)
+ assert.equal(interrupted.calls.some(x=>x.name==='fail_frame_recording_upload'),false)
+})
