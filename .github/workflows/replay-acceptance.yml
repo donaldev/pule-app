@@ -53,17 +53,25 @@ jobs:
       - name: Verify worker credentials without claiming work
         if: github.event_name != 'schedule'
         env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_RECORDINGS_BUCKET: pule-frame-recordings
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           python - <<'PY'
-          import json, os, sys
+          import json, os, sys, shutil, tempfile
           sys.path.insert(0, 'replay-worker')
           from replay_worker import SupabaseAPI
+          from r2_source import R2Source, BUCKET
           if os.environ.get('SUPABASE_URL') != 'https://pgljdmevusgvvlplaedt.supabase.co' or not os.environ.get('SUPABASE_SERVICE_ROLE_KEY'):
               raise SystemExit('Acceptance worker secrets are missing or target the wrong project.')
           # Read bucket metadata only; service_role intentionally has no direct app-table SELECT.
           try:
+              if shutil.disk_usage(tempfile.gettempdir()).free < 8 * 1024**3:
+                  raise ValueError('Insufficient recording scratch space')
+              R2Source().client.head_bucket(Bucket=BUCKET)
               api = SupabaseAPI(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_ROLE_KEY'])
               conn, response = api._request('GET', '/storage/v1/bucket/frame-replays')
               try:
@@ -74,7 +82,7 @@ jobs:
                   conn.close()
           except Exception:
               raise SystemExit('Acceptance credential verification failed; no recording was claimed.') from None
-          print('Acceptance credentials verified; no recording claimed.')
+          print('Supabase/R2 credentials and at least 8 GiB scratch verified; no recording claimed.')
           PY
       - name: Process one queued recording
         if: inputs.operation == 'process-one'
