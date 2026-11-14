@@ -49,7 +49,7 @@ test('one save uploads, finalizes and queues; failures retain the same operation
    if(failure)h[failure]=true
    assert.equal(button(tree,'Save & Create Replay').props.disabled,false)
    button(tree,'Save & Create Replay').props.onClick();await tick();tree=render()
-   const sequence=h.calls.filter(c=>c[0]!=='persist').map(c=>c[0])
+   const sequence=h.calls.filter(c=>!['persist','published'].includes(c[0])).map(c=>c[0])
    assert.deepEqual(sequence,failure==='interrupted'?['reserve','transfer']:failure==='finalizeFailed'?['reserve','transfer','finalize']:['reserve','transfer','finalize','queue'])
    assert.ok(h.calls.findIndex(c=>c[0]==='persist')<h.calls.findIndex(c=>c[0]==='reserve'))
    const operations=h.calls.filter(c=>c[0]==='persist').map(c=>c[1].operation)

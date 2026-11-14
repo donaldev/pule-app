@@ -18,3 +18,10 @@
 .momentum-text summary { display:flex; align-items:center; min-height:44px; cursor:pointer; color:var(--brass); }
 .momentum-text ol { padding-left:18px; }
 .momentum-text li { margin-bottom:8px; }
+
+/* Keep inspection available without a separate large inspector card. */
+.momentum-detail { padding:8px 0; background:transparent; border-radius:0; }
+.momentum-detail p { margin-top:4px; color:var(--muted); }
+.momentum-stats { font-size:12px; }
+.momentum-stats > summary { min-height:44px; display:flex; align-items:center; color:var(--brass); cursor:pointer; }
+.momentum-stats .momentum-summary { padding:6px 0; }

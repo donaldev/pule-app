@@ -4,7 +4,7 @@ const MyStatsView = lazy(() => import('../stats/MyStatsView').then(m => ({defaul
 import { PageHeading } from '../../components/ui/Primitives'
 import { Icon } from '../../components/ui/Icon'
 import type { SessionState } from '../../data/remote/database.types'
-import { listFrameReplays } from '../../data/remote/replayService'
+import { countPublishedReplays } from '../../data/remote/replayService'
 import { getSessionState } from '../../data/remote/scoringService'
 import type { ConnectedGame } from '../connected/useConnectedGame'
 import { MatchContext } from '../connected/MatchContext'
@@ -49,18 +49,13 @@ function useNightResults(game:ConnectedGame, enabled:boolean) {
   const scoped=Object.values(states).filter(s=>s.session.group_id===game.groupId && game.sessions.some(r=>r.id===s.session.id))
   return {states:scoped,loading:loading || (enabled && scoped.length+failures.length<game.sessions.length),failures,retry:()=>setRetry(x=>x+1)}
 }
-function NightCard({state,game}:{state:SessionState;game:ConnectedGame}){
-  const [replayCount, setReplayCount] = useState(0)
-  useEffect(() => {
-    let alive = true
-    listFrameReplays(game.userId, state.session.id).then(rows => { if (alive) setReplayCount(rows.length) }).catch(() => {})
-    return () => { alive = false }
-  }, [game.userId, state.session.id])
+function NightCard({state,game,replayCount}:{state:SessionState;game:ConnectedGame;replayCount?:number}){
   const active=state.session.status==='active'
   const pair=state.participants.length===2
-  return <a className={`night-result-card ${pair?'pair-result':''} ${nightOutcome(state)==='Draw'?'draw-result':''}`} href={`#/session/${state.session.id}`} aria-label={`Open match: ${state.participants.map(p=>`${p.display_name} ${state.scores[p.player_id] ?? 'score not recorded'}`).join(' and ')}, ${nightOutcome(state)}, ${displayDate(state.session.occurred_on)}`}>{replayCount > 0 && <span className="replay-count" aria-label={`${replayCount} playable replays`}><Icon name="video" size={18} /> {replayCount}</span>}
+  return <a className={`night-result-card ${pair?'pair-result':''} ${nightOutcome(state)==='Draw'?'draw-result':''}`} href={`#/session/${state.session.id}`} aria-label={`Open match: ${state.participants.map(p=>`${p.display_name} ${state.scores[p.player_id] ?? 'score not recorded'}`).join(' and ')}, ${nightOutcome(state)}, ${displayDate(state.session.occurred_on)}`}>
+    <div className="night-result-title"><span className={active?'result-badge active-night':'result-badge'}>{active?'In progress':nightOutcome(state)}</span></div>
     <div className="night-scorelines">{state.participants.map(p=><div key={p.player_id} className={state.session.status==='finalized' && Object.values(state.scores).filter(s=>s===state.scores[p.player_id]).length===1 && state.scores[p.player_id]===Math.max(...Object.values(state.scores).filter((s):s is number=>s!==null)) ? 'result-winner' : ''}><strong>{p.display_name}</strong><span>{state.scores[p.player_id] ?? '—'}</span></div>)}</div>
-    <div className="night-result-meta"><span className={active?'result-badge active-night':'result-badge'}>{active?'In progress':nightOutcome(state)}</span><span>{displayDate(state.session.occurred_on)}</span></div>
+    <div className="night-result-meta"><span>{displayDate(state.session.occurred_on)}</span>{replayCount !== undefined && replayCount > 0 && <span className="replay-count" aria-label={`${replayCount} published ${replayCount === 1 ? 'replay' : 'replays'}`}><Icon name="video" size={16} />{replayCount}</span>}</div>
     <div className="night-result-footer"><span>{game.options?.venues.find(v=>v.id===state.session.venue_id)?.display_name ?? 'Venue not recorded'}</span><span>{active?'Resume match':state.session.record_kind==='result_only'?'View result':'View match'} <Icon name="arrow" /></span></div>
   </a>
 
@@ -75,6 +70,16 @@ export function HistoryView({game,groupView=true}:{game:ConnectedGame;groupView?
   const includesNight=(id:string)=>(groupView || result.states.some(s=>s.session.id===id && s.participants.some(p=>p.player_id===ownPlayer))) && (!selectedKey || participantKey(result.states.find(s=>s.session.id===id)?.participants.map(p=>p.player_id)??[])===selectedKey)
   const finalized=game.sessions.filter(s=>s.status==='finalized').sort((a,b)=>(b.occurred_on??'').localeCompare(a.occurred_on??'')||a.id.localeCompare(b.id))
   const active=game.sessions.filter(s=>s.status!=='finalized')
+  const visibleReplayKey = result.loading || game.listsLoading ? '' : result.states.filter(s => includesNight(s.session.id)).map(s => s.session.id).sort().join(',')
+  const replayScope = `${game.userId}:${game.groupId}:${visibleReplayKey}`
+  const [replayCounts, setReplayCounts] = useState<{ scope: string; counts: Record<string, number> } | null>(null)
+  useEffect(() => {
+    let alive = true
+    if (!visibleReplayKey) return
+    countPublishedReplays(game.userId, visibleReplayKey.split(',')).then(counts => { if (alive) setReplayCounts({ scope: replayScope, counts }) }).catch(() => { if (alive) setReplayCounts(null) })
+    return () => { alive = false }
+  }, [game.userId, replayScope, visibleReplayKey])
+  const countFor = (id: string) => replayCounts?.scope === replayScope ? replayCounts.counts[id] : undefined
   return <div className="results-page history-page"><PageHeading label="" title="Match history" />
     <div className="results-tabs" role="group" aria-label="History view"><button aria-pressed={!groupView} onClick={()=>setGroupView(false)}>My history</button><button aria-pressed={groupView} onClick={()=>setGroupView(true)}>Match history</button></div>
     {!groupView && !ownPlayer ? <section className="results-empty"><h2>Personal history</h2><p>Claim your existing games to see them here.</p>{game.groups.length>0&&<button className="button button-secondary" onClick={()=>setGroupView(true)}>View match results</button>}</section>
@@ -85,8 +90,8 @@ export function HistoryView({game,groupView=true}:{game:ConnectedGame;groupView?
       {game.error&&<p role="alert">We couldn’t load these results. <button className="text-button" onClick={game.refresh}>Try again</button></p>}
       {!!result.failures.length&&<p role="alert">Some results couldn’t be loaded. <button className="text-button" onClick={result.retry}>Try again</button></p>}
       {!game.listsLoading&&!game.error&&!game.sessions.length&&<section className="personal-connection"><h2>No completed nights</h2><p>Completed nights will appear here.</p><a className="button" href="#/play">Start a night</a></section>}
-      {active.some(s=>includesNight(s.id))&&<section className="result-list"><h2>In progress</h2>{active.filter(s=>includesNight(s.id)).map(s=>result.states.find(x=>x.session.id===s.id)).filter((s):s is SessionState=>!!s).map(s=><NightCard key={s.session.id} state={s} game={game}/>)}</section>}
-      <section className="result-list" aria-label="Completed nights">{finalized.some(s=>includesNight(s.id))&&<h2>Completed</h2>}{finalized.filter(s=>includesNight(s.id)).map(s=>{const saved=result.states.find(x=>x.session.id===s.id);return saved?<NightCard key={s.id} state={saved} game={game}/>:null})}</section>
+      {active.some(s=>includesNight(s.id))&&<section className="result-list"><h2>In progress</h2>{active.filter(s=>includesNight(s.id)).map(s=>result.states.find(x=>x.session.id===s.id)).filter((s):s is SessionState=>!!s).map(s=><NightCard key={s.session.id} state={s} game={game} replayCount={countFor(s.session.id)}/>)}</section>}
+      <section className="result-list" aria-label="Completed nights">{finalized.some(s=>includesNight(s.id))&&<h2>Completed</h2>}{finalized.filter(s=>includesNight(s.id)).map(s=>{const saved=result.states.find(x=>x.session.id===s.id);return saved?<NightCard key={s.id} state={saved} game={game} replayCount={countFor(saved.session.id)}/>:null})}</section>
       {game.sessions.length===100&&<p className="annotation">Showing the latest 100 recorded nights.</p>}
     </>}
   </div>

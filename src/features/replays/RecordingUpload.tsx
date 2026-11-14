@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Icon } from '../../components/ui/Icon'
 import { Modal } from '../../components/ui/Primitives'
 import type { ReplayUploadStatus, SavedFrame } from '../../data/remote/database.types'
 import { finalizeRecording, getFrameRecording, removeFrameReplay, getRecordingStatus, queueRecording, reserveRecording, transferRecording } from '../../data/remote/recordingService'
@@ -9,15 +10,17 @@ export function RecordingUploadAction({ userId, frame, onPublished }: { userId: 
   const [selected, setSelected] = useState<File | null>(null)
   const picker = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<ReplayUploadStatus | null>(null)
+  const [checked, setChecked] = useState(false)
+  const [checkError, setCheckError] = useState(false)
   const [showPending, setShowPending] = useState(false)
   useEffect(() => {
     let active = true
-    getFrameRecording(userId, frame.id).then(value => { if (active) setPending(value) }).catch(() => {})
+    getFrameRecording(userId, frame.id).then(value => { if (active) { setPending(value); setChecked(true); setCheckError(false) } }).catch(() => { if (active) { setChecked(true); setCheckError(true) } })
     return () => { active = false }
   }, [userId, frame.id])
   return <>
-    {pending ? <button type="button" className="text-button replay-pending" onClick={() => setShowPending(true)}>{pending.processing_status === 'failed' ? 'Replay failed' : pending.processing_status === 'queued' || pending.processing_status === 'processing' ? 'Creating replay…' : 'Recording not finished'}</button>
-      : <button type="button" className="button button-secondary create-replay" onClick={() => picker.current?.click()}>Create Replay</button>}
+    {!checked ? <p role="status">Checking recording…</p> : checkError ? <p role="alert">Recording availability couldn’t be checked. Close and reopen these details to try again.</p> : pending ? <button type="button" className="text-button replay-pending" onClick={() => setShowPending(true)}>{pending.processing_status === 'failed' ? 'Replay failed' : pending.processing_status === 'queued' || pending.processing_status === 'processing' ? 'Creating replay…' : 'Recording not finished'}</button>
+      : <button type="button" className="button frame-recording-action" onClick={() => picker.current?.click()}><Icon name="upload" /><span>Add recording</span></button>}
     <input ref={picker} type="file" accept="video/mp4,.mp4" hidden aria-label="Choose frame recording" onChange={e => { const file = e.target.files?.[0]; if (file) { setSelected(file) }; e.target.value = '' }} />
     {(selected || showPending) && <Modal title={`Create replay · Frame ${frame.frame_number}`} onClose={() => { setSelected(null); setShowPending(false); void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }}>
       <RecordingUpload key={`${userId}:${frame.id}`} userId={userId} frame={frame} onPublished={() => { void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }} initialFile={selected ?? undefined} initialStatus={pending} onRemoved={() => { setSelected(null); setShowPending(false); setPending(null); onPublished() }} />

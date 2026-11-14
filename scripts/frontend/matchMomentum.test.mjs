@@ -29,28 +29,27 @@ const React={createElement:(type,props,...children)=>typeof type==='function'&&[
 const useState=initial=>{const i=cursor++;if(!(i in values))values[i]=initial;return [values[i],v=>{values[i]=v}]}
 globalThis.__momentum={React,useState,matchMomentumData}
 const source=(await read('src/features/connected/MatchMomentum.tsx')).replace(/^import .*$/gm,'')
-const {default:Chart}=await import(url('const {React,useState,matchMomentumData}=globalThis.__momentum;const Line="Line",LineChart="LineChart",ReferenceDot="ReferenceDot",ReferenceLine="ReferenceLine",ResponsiveContainer="ResponsiveContainer",XAxis="XAxis",YAxis="YAxis";\n'+source))
+const {default:Chart}=await import(url('const {React,matchMomentumData}=globalThis.__momentum;const useId=()=>"momentum-text";const Line="Line",LineChart="LineChart",ReferenceDot="ReferenceDot",ReferenceLine="ReferenceLine",ResponsiveContainer="ResponsiveContainer",XAxis="XAxis",YAxis="YAxis";\n'+source))
 const nodes=n=>n&&typeof n==='object'?[n,...n.children.flatMap(nodes)]:[]
 const text=n=>n&&typeof n==='object'?n.children.map(text).join(' ').replace(/\s+/g,' '):String(n??'')
 const render=state=>{cursor=0;return nodes(Chart({state}))}
-test('tap, keyboard and native selection retain correct detail; chart is step-style with only selected marker',()=>{
- values=[];const state=fixture();let all=render(state)
- assert.match(text(all.find(n=>n.props.className==='momentum-detail')),/Starting score.*before frame 1/)
- all.find(n=>n.props['aria-label']==='Momentum frame').props.onChange({target:{value:'3'}});all=render(state)
- assert.match(text(all.find(n=>n.props.className==='momentum-detail')),/Frame 3.*Blair won.*Alex 1 – 2 Blair.*Blair ahead by 1/)
- all.find(n=>n.props.className==='momentum-plot').props.onKeyDown({key:'ArrowRight',preventDefault(){}});all=render(state);assert.match(text(all.find(n=>n.props.className==='momentum-detail')),/Tied score/)
- all.find(n=>n.props.className==='momentum-plot').props.onClick({clientX:320,currentTarget:{getBoundingClientRect:()=>({left:0,width:320})}});all=render(state);assert.match(text(all.find(n=>n.props.className==='momentum-detail')),/Frame 5/)
- const line=all.find(n=>n.type==='Line');assert.equal(line.props.type,'stepAfter');assert.equal(line.props.dot,false);assert.equal(line.props.isAnimationActive,false)
- assert.equal(all.find(n=>n.type==='ResponsiveContainer').props.height,220);assert.ok(all.find(n=>n.type==='summary'&&text(n)==='View score progression as text'))
- assert.equal(all.filter(n=>n.type==='ReferenceDot').length,1)
- values=[];assert.match(text(render(fixture([]))[0]),/complete, ordered/)
+test('main momentum is a static step chart with zero baseline, Start/Final and accessible exact progression',()=>{
+ const state=fixture(),all=render(state)
+ assert.equal(all.some(n=>['button','select','details','summary'].includes(n.type)),false)
+ const plot=all.find(n=>n.props.className==='momentum-plot');assert.equal(plot.props.role,'img');assert.equal(plot.props['aria-describedby'],'momentum-text')
+ const description=all.find(n=>n.props.id==='momentum-text');assert.equal(description.props.className,'sr-only');assert.match(text(description),/Frame 3.*Blair won.*Alex 1 – 2 Blair.*Blair ahead by 1/)
+ const line=all.find(n=>n.type==='Line');assert.equal(line.props.type,'stepAfter');assert.equal(line.props.isAnimationActive,false);assert.equal(line.props.dot,false)
+ assert.deepEqual(all.find(n=>n.type==='LineChart').props.data,matchMomentumData(state).points)
+ assert.equal(all.find(n=>n.type==='ReferenceLine').props.y,0)
+ const axis=all.find(n=>n.type==='XAxis');assert.deepEqual(axis.props.ticks,[0,5]);assert.equal(axis.props.tickFormatter(0),'Start');assert.equal(axis.props.tickFormatter(5),'Final')
+ assert.equal(all.find(n=>n.type==='ResponsiveContainer').props.height,220)
+ assert.match(text(render(fixture([]))[0]),/complete, ordered/)
 })
-test('disclosure starts collapsed, loads on expansion and retains the mounted chart on collapse',async()=>{
- const heading=(await read('src/components/ui/DisclosureHeading.tsx')).replace(/^import .*$/gm,'')
- const src=heading+'\nconst MatchDisclosureHeading=DisclosureHeading;\n'+(await read('src/features/connected/MatchMomentumSection.tsx')).replace(/^import .*$/gm,'')
- const {MatchMomentumSection}=await import(url('const {React,useState}=globalThis.__momentum;class Component{};const lazy=()=>"LazyMomentum",Suspense="Suspense";\n'+src))
- values=[];const draw=()=>{cursor=0;return nodes(MatchMomentumSection({state:fixture()}))};let all=draw()
- assert.equal(all.find(n=>n.type==='button').props['aria-expanded'],false);assert.equal(all.some(n=>n.type==='LazyMomentum'),false)
- all.find(n=>n.type==='button').props.onClick();all=draw();assert.equal(all.find(n=>n.props.id==='match-momentum-content').props.hidden,false);assert.equal(all.some(n=>n.type==='LazyMomentum'),true)
- all.find(n=>n.type==='button').props.onClick();all=draw();assert.equal(all.find(n=>n.props.id==='match-momentum-content').props.hidden,true);assert.equal(all.some(n=>n.type==='LazyMomentum'),true)
+test('momentum chart mounts immediately beneath its visible heading without a disclosure',async()=>{
+ const src=(await read('src/features/connected/MatchMomentumSection.tsx')).replace(/^import .*$/gm,'')
+ const {MatchMomentumSection}=await import(url('const {React}=globalThis.__momentum;class Component{};const lazy=()=>"LazyMomentum",Suspense="Suspense";\n'+src))
+ const all=nodes(MatchMomentumSection({state:fixture()}))
+ assert.equal(all.some(n=>n.type==='LazyMomentum'),true)
+ assert.equal(all.some(n=>n.type==='button'),false)
+ assert.match(text(all.find(n=>n.type==='h2')),/Match momentum/)
 })
