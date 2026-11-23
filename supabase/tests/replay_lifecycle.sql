@@ -56,8 +56,9 @@ set role authenticated;
 set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';
 select test.ok((app.get_session_frame_recordings(session_id)->0->>'state')='processing','committed source appears as Processing replay before queue') from test.upload_cases where n=1;
 select app.queue_frame_replay_processing((answer->>'upload_id')::uuid,'[[20,20],[620,20],[620,460],[20,460]]',640,480) from test.upload_reservations where n=1;
+select test.ok((app.get_my_replays()->0->>'status')='queued' and app.get_my_replays()->0->>'storage_path' is null,'uploader sees queued state without source path');
 set request.jwt.claim.sub='20000000-0000-0000-0000-000000000002';
-select test.ok((app.get_my_replays()->0->>'status')='queued' and app.get_my_replays()->0->>'storage_path' is null,'teammate sees queued state without source path');
+select test.ok(app.get_my_replays()='[]'::jsonb,'teammate does not see another uploader’s queued replay');
 set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';
 select test.denied(format('select app.reserve_r2_frame_recording(gen_random_uuid(),%L,100,repeat(''b'',64))',frame_id),'55000','queued recording blocks duplicates') from test.upload_cases where n=1;
 reset role;
@@ -127,11 +128,15 @@ reset role;
 set role authenticated;
 select test.ok(not exists(select 1 from jsonb_array_elements(app.get_session_frame_recordings(session_id)) x where x->>'frame_id'=frame_id::text),'published video no longer listed as processing') from test.upload_cases where n=1;
 select test.denied(format('select app.reserve_r2_frame_recording(gen_random_uuid(),%L,100,repeat(''c'',64))',frame_id),'55000','published recording blocks new upload') from test.upload_cases where n=1;
-select test.ok((app.get_my_replays()->0->>'status')='ready','uploader sees the ready replay');
+select test.ok(jsonb_array_length(app.get_my_replays())=1 and (app.get_my_replays()->0->>'status')='ready'
+  and exists(select 1 from app.frame_replays r join storage.objects o on o.name=r.storage_path
+    where o.bucket_id='frame-replays' and r.storage_path=app.get_my_replays()->0->>'storage_path'),
+  'uploader sees the ready replay and can sign its Frame History object');
 set request.jwt.claim.sub='20000000-0000-0000-0000-000000000002';
-select test.ok((app.get_my_replays()->0->>'frame_number')='1' and jsonb_array_length(app.get_my_replays())=1
-  and exists(select 1 from storage.objects where bucket_id='frame-replays' and name=app.get_my_replays()->0->>'storage_path'),
-  'linked teammate can sign the same finished object');
+select test.ok(app.get_my_replays()='[]'::jsonb
+  and exists(select 1 from app.frame_replays r join storage.objects o on o.name=r.storage_path
+    where o.bucket_id='frame-replays' and r.frame_id=(select frame_id from test.upload_cases where n=1)),
+  'teammate cannot list the replay in My Replays and can still sign its Frame History object');
 set request.jwt.claim.sub='20000000-0000-0000-0000-000000000003';
 select test.ok(app.get_my_replays()='[]'::jsonb,'unlinked group viewer has no personal replay rows');
 set request.jwt.claim.sub='20000000-0000-0000-0000-000000000005';
