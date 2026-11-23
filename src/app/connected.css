@@ -1063,6 +1063,11 @@
 .replay-frame-picker { display:grid; gap:16px; padding-top:16px; }
 .replay-frame-picker label { display:grid; gap:8px; }
 .replay-frame-picker select { width:100%; min-height:48px; max-width:100%; background:var(--felt); color:var(--text); }
+.replay-frame-picker p { margin:0; }
+.replay-recording-name { overflow-wrap:anywhere; }
+.replay-recording-name p, .replay-frame-suggestion p { margin-top:4px; }
+.replay-frame-suggestion { padding:10px 12px; border:1px solid var(--line); border-radius:var(--radius-control); background:var(--felt); }
+.replay-frame-suggestion strong { color:var(--brass); }
 .modal:has(.replay-frame-picker) { background:var(--surface); color:var(--text); border-color:var(--brass); }
 .modal:has(.replay-frame-picker) h2,.modal:has(.replay-frame-picker) .icon-button { color:var(--text); }
 @media(max-width:360px) { .connected-app .frame-summary-toggle { grid-template-columns:38px minmax(0,1fr) 70px 44px; } }

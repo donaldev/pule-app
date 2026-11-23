@@ -20,7 +20,7 @@ function child(v: DataView, parent: Box, type: string) {
   return result
 }
 /** Bounded MP4 metadata only; do not load the recording into memory. */
-export async function inspectRecording(file: Blob): Promise<RecordingGeometry> {
+async function readMovieBox(file: Blob): Promise<ArrayBuffer> {
   let offset = 0
   for (let count = 0; offset + 8 <= file.size && count < 10000; count++) {
     const header = new DataView(await file.slice(offset, offset + 16).arrayBuffer())
@@ -31,12 +31,102 @@ export async function inspectRecording(file: Blob): Promise<RecordingGeometry> {
     if (!Number.isSafeInteger(size) || size < 8 || offset + size > file.size) throw Error('Invalid MP4 recording.')
     if (type === 'moov') {
       if (size > 16 * 1024 * 1024) throw Error('This MP4 has too much metadata. Export a simpler MP4 recording.')
-      return parseRecordingMetadata(await file.slice(offset, offset + size).arrayBuffer())
+      return file.slice(offset, offset + size).arrayBuffer()
     }
     offset += size
   }
   throw Error('Choose a complete MP4 recording. This file has no readable video metadata.')
 }
+export async function inspectRecording(file: Blob): Promise<RecordingGeometry> {
+  return parseRecordingMetadata(await readMovieBox(file))
+}
+
+export type RecordingTiming = {
+  startMs: number
+  durationMs: number | null
+} & (
+  { source: 'creation-date'; reliability: 'high' }
+  | { source: 'mvhd'; reliability: 'medium' }
+  | { source: 'lastModified'; reliability: 'weak' }
+)
+
+function optionalBoxes(view: DataView, start: number, end: number): Box[] {
+  try { return boxes(view, start, end) } catch { return [] }
+}
+
+function embeddedCreationDate(view: DataView, movie: Box[], userData: Box[], parseDate: (date: string) => number | null) {
+  const decoder = new TextDecoder()
+  const readText = (start: number, end: number) => end - start <= 128
+    ? decoder.decode(new Uint8Array(view.buffer, view.byteOffset + start, end - start)).replace(/\u0000+$/u, '').trim()
+    : ''
+  for (const meta of [...movie, ...userData].filter(box => box.type === 'meta')) {
+    for (const start of [meta.body + 4, meta.body]) {
+      const children = optionalBoxes(view, start, meta.end)
+      const keys = children.find(box => box.type === 'keys')
+      const items = children.find(box => box.type === 'ilst')
+      if (!items) continue
+      const creationKeys = keys && keys.end - keys.body >= 8 ? optionalBoxes(view, keys.body + 8, keys.end) : []
+      const index = creationKeys.findIndex(key => key.type === 'mdta' && readText(key.body, key.end) === 'com.apple.quicktime.creationdate') + 1
+      for (const item of optionalBoxes(view, items.body, items.end)) {
+        if (item.type !== '©day' && !(index && view.getUint32(item.start + 4) === index)) continue
+        const data = optionalBoxes(view, item.body, item.end).find(box => box.type === 'data')
+        if (!data || data.end - data.body < 8 || view.getUint32(data.body) !== 1) continue
+        const value = parseDate(readText(data.body + 8, data.end))
+        if (value !== null) return value
+      }
+    }
+  }
+  // Older QuickTime user-data strings have a 16-bit length followed by a language code.
+  for (const item of userData.filter(box => box.type === '©day' && box.end - box.body >= 4)) {
+    const start = item.body + 4
+    const end = start + view.getUint16(item.body)
+    if (end > item.end) continue
+    const value = parseDate(readText(start, end))
+    if (value !== null) return value
+  }
+  return null
+}
+
+export async function inspectRecordingTiming(file: File, now = Date.now()): Promise<RecordingTiming | null> {
+  const plausible = (ms: number) => Number.isFinite(ms) && ms >= Date.UTC(2000, 0, 1) && ms <= now + 5 * 60_000
+  const parseDate = (date: string): number | null => {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}:\d{2}:\d{2}(?:\.\d+)?)(Z|[+-]\d{2}:?\d{2})$/.exec(date)
+    if (!parts) return null
+    const [, year, month, day, time, zone] = parts
+    const calendar = new Date(0)
+    calendar.setUTCFullYear(Number(year), Number(month) - 1, Number(day))
+    if (calendar.getUTCMonth() + 1 !== Number(month) || calendar.getUTCDate() !== Number(day)) return null
+    const ms = Date.parse(`${year}-${month}-${day}T${time}${zone}`)
+    return plausible(ms) ? ms : null
+  }
+  try {
+    const view = new DataView(await readMovieBox(file))
+    const root = boxes(view, 0, view.byteLength)[0]
+    const movie = boxes(view, root.body, root.end)
+    const udta = movie.find(box => box.type === 'udta')
+    const creationDate = embeddedCreationDate(view, movie, udta ? optionalBoxes(view, udta.body, udta.end) : [], parseDate)
+    const header = movie.find(box => box.type === 'mvhd')
+    let startMs = NaN
+    let durationMs: number | null = null
+    if (header && header.end > header.body) {
+      const version = view.getUint8(header.body)
+      if ((version === 0 || version === 1) && header.end - header.body >= (version === 0 ? 20 : 32)) {
+        const readTime = (offset: number) => version === 0 ? view.getUint32(offset) : Number(view.getBigUint64(offset))
+        const timescale = header.body + (version === 0 ? 12 : 20)
+        startMs = Date.UTC(1904, 0, 1) + readTime(header.body + 4) * 1000
+        const duration = readTime(timescale + 4) / view.getUint32(timescale) * 1000
+        // Match the existing recording preview's two-hour upload limit.
+        if (duration >= 1000 && duration <= 7_200_000) durationMs = duration
+      }
+    }
+    if (creationDate !== null) return { startMs: creationDate, durationMs, source: 'creation-date', reliability: 'high' }
+    if (plausible(startMs)) return { startMs, durationMs, source: 'mvhd', reliability: 'medium' }
+  } catch {
+    // Missing or malformed timing must never prevent manual frame selection.
+  }
+  return plausible(file.lastModified) ? { startMs: file.lastModified, durationMs: null, source: 'lastModified', reliability: 'weak' } : null
+}
+
 export function parseRecordingMetadata(buffer: ArrayBuffer): RecordingGeometry {
   const v = new DataView(buffer), root = boxes(v, 0, v.byteLength).find(b => b.type === 'moov')
   if (!root) throw Error('Missing MP4 metadata.')

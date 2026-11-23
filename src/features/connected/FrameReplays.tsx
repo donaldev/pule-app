@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Icon } from '../../components/ui/Icon'
-import { Modal } from '../../components/ui/Primitives'
 import type { FrameRecordingState, FrameReplay, ReplayMatch, SavedFrame } from '../../data/remote/database.types'
+import { MatchRecordingPicker } from '../replays/MatchRecordingPicker'
 import { RecordingUploadAction } from '../replays/RecordingUpload'
 import { listFrameRecordings } from '../../data/remote/recordingService'
 import { listFrameReplays } from '../../data/remote/replayService'
@@ -21,12 +21,10 @@ export function FrameReplays({ userId, sessionId, match, children, upload, descr
   const [playback, setPlayback] = useState<{ frame: SavedFrame; replay: FrameReplay } | null>(null)
   const [showAllReplays, setShowAllReplays] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [selectedFrameId, setSelectedFrameId] = useState('')
   const [recordings, setRecordings] = useState<FrameRecordingState[]>([])
   const uploadsEnabled = import.meta.env?.VITE_FRAME_RECORDING_UPLOADS === 'true'
   const hasReplay = (frame: SavedFrame) => replays.some(r => r.frame_id === frame.id && r.group_id === frame.group_id)
   const eligibleFrames = (archiveFrames ?? []).filter(f => uploadsEnabled && upload?.detailEligible && f.detail_eligible && f.status === 'completed' && f.participants.some(p => p.player_id === upload.playerId) && !hasReplay(f) && !recordings.some(r => r.frame_id === f.id))
-  const selectedFrame = eligibleFrames.find(f => f.id === selectedFrameId)
   useEffect(() => {
     let alive = true
     const refresh = () => Promise.all([listFrameReplays(userId, sessionId), listFrameRecordings(userId, sessionId)]).then(([rows, active]) => {
@@ -59,7 +57,7 @@ export function FrameReplays({ userId, sessionId, match, children, upload, descr
             {recording.owned && recording.state !== 'cleanup' && <RecordingUploadAction userId={userId} frame={frame} onPublished={() => setAttempt(n => n + 1)} />}
           </div>
         })}
-        {availability === 'ready' && eligibleFrames.length > 0 && <button type="button" className="button frame-recording-action add-frame-recording" onClick={() => { setSelectedFrameId(''); setAdding(true) }}><Icon name="upload" />Add frame recording</button>}
+        {availability === 'ready' && eligibleFrames.length > 0 && <button type="button" className="button frame-recording-action add-frame-recording" onClick={() => setAdding(true)}><Icon name="upload" />Add frame recording</button>}
         {availability === 'ready' && eligibleFrames.length === 0 && <p className="annotation recording-availability" role="status">{!uploadsEnabled ? 'Recording uploads are disabled in this build.' : !upload?.playerId ? 'Your linked player identity is unavailable.' : !upload.detailEligible ? 'This match is not eligible for recordings.' : !archiveFrames.some(f => f.status === 'completed' && f.detail_eligible && f.participants.some(p => p.player_id === upload.playerId)) ? 'No eligible completed frames for this account.' : 'Every eligible frame already has a recording.'}</p>}
       </div>
     </section>}
@@ -76,9 +74,8 @@ export function FrameReplays({ userId, sessionId, match, children, upload, descr
       if (recording && (!recording.owned || recording.state === 'cleanup')) return <p role="status" className="annotation">{recording.state === 'cleanup' ? 'Removing recording…' : recording.state === 'uploading' ? 'Uploading' : 'Processing replay'}</p>
       return <RecordingUploadAction userId={userId} frame={frame} onPublished={() => setAttempt(n => n + 1)} />
     }, replays.length)}
-    {adding && <Modal title="Add frame recording" onClose={() => setAdding(false)}><div className="replay-frame-picker"><label>Choose frame<select value={selectedFrameId} onChange={e => setSelectedFrameId(e.target.value)}><option value="">Select a frame</option>{eligibleFrames.map(frame => <option key={frame.id} value={frame.id}>Frame {frame.frame_number}{describeFrame ? ` · ${describeFrame(frame)}` : ''}</option>)}</select></label>
-      {selectedFrame ? <RecordingUploadAction key={selectedFrame.id} userId={userId} frame={selectedFrame} onPublished={() => setAttempt(n => n + 1)} /> : <button type="button" className="button frame-recording-action" disabled><Icon name="upload" />Add recording</button>}
-    </div></Modal>}
+    {adding && <MatchRecordingPicker userId={userId} frames={archiveFrames?.filter(frame => frame.status === 'completed') ?? []} eligibleFrames={eligibleFrames}
+      describeFrame={describeFrame} onClose={() => setAdding(false)} onPublished={() => setAttempt(n => n + 1)} />}
     {playback && <ReplayViewer key={playback.replay.storage_path} userId={userId}
       replay={{ ...match, ...playback.replay, frame_number: playback.frame.frame_number }}
       description={describeFrame?.(playback.frame)} onClose={() => setPlayback(null)}
