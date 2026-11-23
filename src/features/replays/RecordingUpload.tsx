@@ -3,8 +3,9 @@ import { Icon } from '../../components/ui/Icon'
 import { Modal } from '../../components/ui/Primitives'
 import type { ReplayUploadStatus, SavedFrame } from '../../data/remote/database.types'
 import { finalizeRecording, getFrameRecording, removeFrameReplay, getRecordingStatus, queueRecording, reserveRecording, transferRecording } from '../../data/remote/recordingService'
-import { displaySize, displayToSource, inspectRecording, inspectRecordingTiming, pointerToDisplay, sourceToDisplay, validCorners, type Point, type RecordingGeometry, type RecordingTiming } from './recordingGeometry'
+import { displaySize, inspectRecording, inspectRecordingTiming, sourceToDisplay, validCorners, type Point, type RecordingGeometry, type RecordingTiming } from './recordingGeometry'
 import { compressionLimit, compressionSupport, compressVideo, planCompression, scaleCompressionCorners } from './videoCompression'
+import { RecordingCorners } from './RecordingCorners'
 import { videoSampleTypes } from './videoSampleTypes'
 import { clearRecording, hashRecording, readRecording, recordingKey, saveRecording, type RecordingDraft } from './recordingJournal'
 
@@ -36,9 +37,9 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   const [status, setStatus] = useState<ReplayUploadStatus | null>(initialStatus ?? null)
   const [file, setFile] = useState<File | null>(null)
   const [geometry, setGeometry] = useState<RecordingGeometry | null>(null)
-  const [points, setPoints] = useState<Point[]>([])
+  const [rawCorners, setRawCorners] = useState<Point[]>([])
   const [preview, setPreview] = useState('')
-  const [marked, setMarked] = useState(false)
+  const [cornersConfirmed, setCornersConfirmed] = useState(false)
   const [busy, setBusy] = useState('')
   const [removing, setRemoving] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
@@ -46,7 +47,6 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   const [error, setError] = useState(initial.error)
   const alive = useRef(true), locked = useRef(false), cancel = useRef<AbortController | null>(null)
   const transfer = useRef<ReturnType<typeof transferRecording> | null>(null)
-  const video = useRef<HTMLVideoElement>(null), canvas = useRef<HTMLCanvasElement>(null)
   const objectUrl = useRef('')
   const [duration, setDuration] = useState(0)
   const [compression, setCompression] = useState<{
@@ -146,8 +146,8 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
       objectUrl.current = URL.createObjectURL(chosen)
       setCompression(null); setDuration(0); setCompressSelected(false); setCompressed(null)
-      setPreview(objectUrl.current); setFile(chosen); setGeometry(g); setMarked(false)
-      setPoints(next.corners.map(p => sourceToDisplay(p, g)))
+      setPreview(objectUrl.current); setFile(chosen); setGeometry(g); setCornersConfirmed(false)
+      setRawCorners(next.corners)
     })
   }
   useEffect(() => {
@@ -157,19 +157,6 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
     // Validate each selected file once; recovery stays bound to the saved operation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFile])
-  function capture() {
-    if (!geometry || !video.current || !canvas.current) return
-    const expected = displaySize(geometry), v = video.current
-    if (v.videoWidth !== expected.width || v.videoHeight !== expected.height || !Number.isFinite(v.duration) || v.duration <= 0 || v.duration > 7200) {
-      setError('This browser cannot display this recording’s orientation or duration reliably. Export a standard MP4 and try again.'); return
-    }
-    v.pause()
-    const c = canvas.current, scale = Math.min(1, 960 / expected.width)
-    c.width = Math.round(expected.width * scale); c.height = Math.round(expected.height * scale)
-    try { c.getContext('2d')!.drawImage(v, 0, 0, c.width, c.height); setMarked(true); setDuration(v.duration); setError('') }
-    catch { setError('Could not show this frame. Choose the recording again and try again.') }
-  }
-  const rawCorners = geometry ? points.map(p => displayToSource(p, geometry)) : []
   const valid = !!geometry && validCorners(rawCorners, geometry.width, geometry.height)
   const processing = !!status?.processing_status && ['queued', 'processing', 'completed'].includes(status.processing_status)
   const expired = status && (['cleanup', 'cleaned'].includes(status.status) || (!status.processing_status && Date.parse(status.expires_at) <= checkedAt))
@@ -185,13 +172,13 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
         const target = status?.upload_id ?? saved?.uploadId
         if (target || saved?.reservationRequested) await removeFrameReplay(userId, frame.id, target ? { upload: target } : { operation: saved!.operation })
         if (saved && (!target || !saved.uploadId || saved.uploadId === target)) clearRecording(key, saved)
-        if (alive.current) { setDraft(null); setStatus(null); setFile(null); setPreview(''); setGeometry(null); setPoints([]); setMarked(false); setCompressed(null); onRemoved?.() }
+        if (alive.current) { setDraft(null); setStatus(null); setFile(null); setPreview(''); setGeometry(null); setRawCorners([]); setCornersConfirmed(false); setCompressed(null); onRemoved?.() }
       })
     } catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : 'Cancellation could not be confirmed.') }
     finally { if (alive.current) setRemoving(false) }
   }
   async function compress() {
-    if (!file || !compression || !valid) return
+    if (!file || !compression || !cornersConfirmed || !valid) return
     setCompressionElapsed(0)
     await run('Compressing recording', async () => {
       const signal = cancel.current!.signal
@@ -209,13 +196,13 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   }
   async function start() {
     await run('Saving replay', async () => {
-      if (!file || !draft || !geometry || !valid) throw Error('Choose the recording and mark four corners first.')
+      if (!file || !draft || !geometry || !cornersConfirmed || !valid) throw Error('Choose the recording and mark four corners first.')
       const selected = compressSelected ? compressed : null
       const uploadFile = selected?.file ?? file
       const uploadGeometry = selected?.geometry ?? geometry
       // Canvas compression bakes in the original display orientation. Keep the
       // overlay on the original and scale its displayed points for the worker.
-      const corners = selected ? scaleCompressionCorners(points, displaySize(geometry), uploadGeometry) : rawCorners
+      const corners = selected ? scaleCompressionCorners(rawCorners.map(point => sourceToDisplay(point, geometry)), displaySize(geometry), uploadGeometry) : rawCorners
       if (!validCorners(corners, uploadGeometry.width, uploadGeometry.height)) {
         throw Error('The marked table is too small at the compressed resolution. Upload the original recording.')
       }
@@ -253,21 +240,11 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
     {expired && <p role="alert">This recording is no longer active. A new upload will be available after safe removal.</p>}
     {(!processing && !expired && status?.processing_status !== 'failed') && <>
       {!file && !busy && <label className="recording-file">{draft?.reservationRequested && draft.compressedName ? `Choose ${draft.compressedName} to resume` : 'Choose recording'}<input type="file" accept="video/mp4,.mp4" disabled={!!initial.error} onChange={e => void choose(e.target.files?.[0])} /></label>}
-      {preview && <>
-        <video ref={video} src={preview} hidden playsInline preload="auto" onLoadedData={capture} onError={() => setError('This browser cannot play the selected video. Export a compatible MP4.')} />
-        <p className="annotation">Tap the four corners of the playing surface, going around the table clockwise or anticlockwise. Pule uses these to identify shots. Use Undo if you miss a corner.</p>
-        <div className="recording-table" hidden={!marked}>
-          <canvas ref={canvas} />
-          {geometry && <svg viewBox={`0 0 ${displaySize(geometry).width} ${displaySize(geometry).height}`} aria-label="Table corner selection" role="img" preserveAspectRatio="none" onPointerDown={e => {
-            if (busy || points.length >= 4) return
-            const rect = e.currentTarget.getBoundingClientRect()
-            setPoints(p => [...p, pointerToDisplay(e.clientX, e.clientY, rect, geometry)])
-          }}><polygon points={points.map(p => p.join(',')).join(' ')} />{points.map((p, i) => <g key={i}><circle cx={p[0]} cy={p[1]} r={displaySize(geometry).width / 35} /><text x={p[0]} y={p[1]} fontSize={displaySize(geometry).width / 28} textAnchor="middle" dominantBaseline="central">{i + 1}</text></g>)}</svg>}
-        </div>
-        {marked && <><p>{points.length} of 4 corners selected.{points.length === 4 && !valid && ' These corners cannot be processed. Select four distinct corners inside the video, without crossing edges.'}</p><div className="connected-actions"><button type="button" className="text-button" disabled={!!busy || !points.length} onClick={() => setPoints(p => p.slice(0, -1))}>Undo corner</button><button type="button" className="text-button" disabled={!!busy} onClick={() => setPoints([])}>Reset corners</button></div>
-        </>}
-      </>}
-      {marked && compression && canPrepareCompression && <>
+      {preview && geometry && <RecordingCorners key={preview} src={preview} geometry={geometry} corners={rawCorners}
+        confirmed={cornersConfirmed} disabled={!!busy || removing}
+        onChange={next => { setRawCorners(next); setCornersConfirmed(false) }}
+        onConfirm={() => setCornersConfirmed(true)} onDuration={setDuration} />}
+      {cornersConfirmed && compression && canPrepareCompression && <>
         <label className="replay-compression-option">
           <input type="checkbox" checked={compressSelected} disabled={!!busy || removing}
             onChange={e => setCompressSelected(e.currentTarget.checked)} />
@@ -279,7 +256,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
         <p role="status">Original: {(file.size / 1e6).toFixed(2)} MB · Compressed: {(compressed.file.size / 1e6).toFixed(2)} MB</p>
         {recoveryUrl && <p><a className="text-button" href={recoveryUrl} download={compressed.file.name}>Save compressed copy</a> <span className="annotation">Keep a copy if you might need to resume after closing this screen.</span></p>}
       </div>}
-      <button type="button" className="button" disabled={!!busy || removing || !file || !marked || !valid || !!initial.error}
+      <button type="button" className="button" disabled={!!busy || removing || !file || !cornersConfirmed || !valid || !!initial.error}
         onClick={() => void (compressSelected && !compressed ? compress() : start())}>
         {compressSelected && !compressed ? 'Compress recording' : 'Save & Create Replay'}
       </button>

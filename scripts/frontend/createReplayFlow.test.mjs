@@ -14,8 +14,8 @@ const encoderSource=(await source('features/replays/videoCompression.ts')).repla
 globalThis.scaleCompressionCorners=(await import(compile(encoderSource))).scaleCompressionCorners
 globalThis.geometry=geometry
 const uiPrelude=`const navigator={locks:{request:async(key,options,fn)=>fn({})}};const {displaySize,displayToSource,pointerToDisplay,sourceToDisplay,validCorners}=globalThis.geometry;
-const React={createElement:(type,props,...children)=>{if(props?.ref&&type==='video')props.ref.current={...displaySize(globalThis.h.g),videoWidth:displaySize(globalThis.h.g).width,videoHeight:displaySize(globalThis.h.g).height,duration:100,pause(){}};if(props?.ref&&type==='canvas')props.ref.current={getContext:()=>({drawImage(){}})};return {type,props:props??{},children}},Fragment:'fragment'};
-const Modal='modal';
+const React={createElement:(type,props,...children)=>({type,props:props??{},children}),Fragment:'fragment'};
+const Modal='modal',RecordingCorners='RecordingCorners';
 const useState=initial=>{const h=globalThis.h,i=h.cursor++;if(!(i in h.states))h.states[i]=typeof initial==='function'?initial():initial;return [h.states[i],next=>{h.states[i]=typeof next==='function'?next(h.states[i]):next}]};
 const useRef=value=>{const h=globalThis.h,i=h.cursor++;return h.states[i]??(h.states[i]={current:value})};const useEffect=f=>globalThis.h.effects.push(f);
 const recordingKey=()=> 'journal';const readRecording=()=>globalThis.h.initial;
@@ -46,6 +46,15 @@ function component({initial=null,rotation=0,status=null,pilot=false}={}){
  const render=()=>{h.cursor=0;h.effects=[];return RecordingUpload({userId:actor,frame:{id:frame,frame_number:1},onPublished:()=>h.calls.push(['published'])})}
  return render
 }
+function mark(render, points) {
+ const editor = tree => find(tree,n=>n.type==='RecordingCorners').props
+ editor(render()).onDuration(100)
+ editor(render()).onChange(points.map(point=>geometry.displayToSource(point,h.g)))
+ const tree=render()
+ assert.equal(button(tree,'Save & Create Replay').props.disabled,true)
+ editor(tree).onConfirm()
+ return render()
+}
 test('double-click reserves, transfers and queues once; ambiguous failures preserve the same operation',async()=>{
  const originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL
  URL.createObjectURL=()=> 'blob:local-preview';URL.revokeObjectURL=()=>{}
@@ -53,10 +62,8 @@ test('double-click reserves, transfers and queues once; ambiguous failures prese
   for(const failure of [null,'interrupted','finalizeFailed']) {
    const render=component();let tree=render()
    find(tree,n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'recording.mp4',type:'video/mp4',size:100}]}})
-   await tick();tree=render();find(tree,n=>n.type==='video').props.onLoadedData();tree=render()
-   for(const [x,y] of [[20,20],[620,20],[620,460],[20,460]]) {
-    find(tree,n=>n.type==='svg').props.onPointerDown({clientX:x,clientY:y,currentTarget:{getBoundingClientRect:()=>({left:0,top:0,width:640,height:480})}});tree=render()
-   }
+   await tick()
+   tree=mark(render,[[20,20],[620,20],[620,460],[20,460]])
    if(failure)h[failure]=true
    assert.equal(button(tree,'Save & Create Replay').props.disabled,false)
    button(tree,'Save & Create Replay').props.onClick();button(tree,'Save & Create Replay').props.onClick();await tick();tree=render()
@@ -78,12 +85,10 @@ test('pilot hands off rotated corners and compressed bytes, and retries the same
  try {
   let tree=render()
   find(tree,n=>n.type==='input'&&n.props.type==='file').props.onChange({target:{files:[{name:'recording.mp4',type:'video/mp4',size:100}]}})
-  await tick();tree=render();find(tree,n=>n.type==='video').props.onLoadedData();tree=render()
+  await tick()
+  tree=mark(render,[[20,40],[460,40],[460,600],[20,600]])
   for(const effect of h.effects) effect()
   await tick();tree=render()
-  for(const [x,y] of [[20,40],[460,40],[460,600],[20,600]]) {
-   find(tree,n=>n.type==='svg').props.onPointerDown({clientX:x,clientY:y,currentTarget:{getBoundingClientRect:()=>({left:0,top:0,width:480,height:640})}});tree=render()
-  }
   const toggle=find(tree,n=>n.type==='input'&&n.props.type==='checkbox')
   assert.equal(toggle.props.checked,false)
   toggle.props.onChange({currentTarget:{checked:true}});tree=render()

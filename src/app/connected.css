@@ -939,13 +939,23 @@
 .recording-upload progress { width:100%; accent-color:var(--brass); }
 .recording-file { display:grid; gap:8px; font-weight:700; }
 .recording-file input { max-width:100%; min-height:48px; }
-.recording-table { position:relative; border:1px solid var(--brass); background:#0B0E0C; }
-.recording-table[hidden] { display:none; }
-.recording-table canvas { display:block; width:100%; height:auto; }
-.recording-table svg { position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
-.recording-table polygon { fill:#C4A46B33; stroke:#C4A46B; stroke-width:3; vector-effect:non-scaling-stroke; }
-.recording-table circle { fill:#C4A46B; stroke:#0B0E0C; stroke-width:2; }
+.recording-corners { display:grid; gap:10px; }
+.recording-timeline { display:flex; flex-wrap:wrap; align-items:end; gap:4px 12px; }
+.recording-timeline label { display:grid; grid-template-columns:1fr auto; flex:1 1 210px; min-width:0; gap:2px 8px; }
+.recording-timeline label span { color:var(--brass); font-variant-numeric:tabular-nums; }
+.recording-timeline input { grid-column:1/-1; width:100%; min-height:44px; margin:0; accent-color:var(--brass); }
+.recording-step-controls, .recording-corner-controls { display:flex; flex-wrap:wrap; gap:4px; }
+.recording-step-controls button, .recording-corner-controls button { min-height:44px; min-width:44px; padding:4px 8px; }
+.recording-table { position:relative; width:100%; min-height:160px; max-height:min(56dvh, 480px); overflow:hidden; touch-action:none; user-select:none; border-radius:8px; background:#0B0E0C; }
+.recording-table-layer { position:absolute; inset:0; margin:auto; }
+.recording-table canvas, .recording-table svg { display:block; position:absolute; inset:0; width:100%; height:100%; }
+.recording-table polygon, .recording-table polyline { stroke:#C4A46B; stroke-width:2; vector-effect:non-scaling-stroke; }
+.recording-table polygon { fill:#C4A46B33; }
+.recording-table polyline { fill:none; }
+.recording-marker-hit { pointer-events:all; }
+.recording-marker-dot { fill:#C4A46B; stroke:#fff4d6; stroke-width:2; vector-effect:non-scaling-stroke; }
 .recording-table text { fill:#0B0E0C; font-weight:800; pointer-events:none; }
+.recording-seek-status { position:absolute; bottom:8px; left:8px; border-radius:6px; background:var(--surface); padding:4px 8px; pointer-events:none; }
 .recording-coordinates { display:flex; gap:12px; margin-top:8px; }
 .recording-coordinates label { flex:1; min-width:0; }
 .recording-coordinates input { width:100%; min-height:44px; color:var(--text); background:var(--felt); border:1px solid var(--line); padding:8px; }
@@ -970,7 +980,6 @@
 .modal:has(.replay-confirm) { background:var(--surface); color:var(--text); border-color:var(--brass); }
 .modal:has(.replay-confirm) h2, .modal:has(.replay-confirm) .icon-button { color:var(--text); }
 .replay-delete { min-height:44px; margin-top:12px; text-decoration:underline; }
-.recording-table circle { stroke:#fff4d6; stroke-width:2; vector-effect:non-scaling-stroke; }
 .recording-upload .connected-actions .text-button { min-height:44px; padding:8px 12px; }
 
  .connected-app .frame-history-header > .frame-details-toggle { display:grid; place-items:center; width:44px; min-width:44px; height:44px; min-height:44px; padding:0; margin:0; transform:none; }
