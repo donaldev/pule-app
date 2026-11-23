@@ -1,4 +1,4 @@
-"""Trusted one-job Stage 1 worker. SQL leases own paths, publication and cleanup.
+"""Trusted Stage 1 worker. SQL leases own paths, publication and cleanup.
 
 No caller-supplied URLs/job JSON. Credentials stay in the server environment.
 The supplied replay_processor.py detector/renderer is invoked unchanged.
@@ -26,6 +26,8 @@ from r2_source import R2Source, MAX_SOURCE_BYTES
 from replay_processor import analysis_crop, ANALYSIS_WIDTH, MAX_ANALYSIS_HEIGHT
 
 MAX_BYTES = 262144000
+# Leave 25 minutes of the Actions processing step for the last claimed job.
+ADDITIONAL_CLAIM_WINDOW_SECONDS = 10 * 60
 UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 KEY_RE = re.compile(rf'^{UUID}/{UUID}/{UUID}\.mp4$')
 
@@ -277,9 +279,13 @@ def verify_toolchain():
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Claim and process one trusted Pule replay job')
+    parser = argparse.ArgumentParser(description='Claim and process trusted Pule replay jobs sequentially')
     parser.add_argument('--check', action='store_true', help='Validate local dependencies only; never claim or contact Supabase')
+    parser.add_argument('--max-jobs', type=int, default=1, help='Maximum jobs to claim (default: 1)')
     args = parser.parse_args()
+    if args.max_jobs < 1:
+        parser.error('--max-jobs must be positive')
+    claim_deadline = time.monotonic() + ADDITIONAL_CLAIM_WINDOW_SECONDS
     stage = 'verify_toolchain'
     try:
         verify_toolchain()
@@ -291,15 +297,21 @@ def main():
         r2 = R2Source() if os.environ.get('R2_ACCOUNT_ID') else None
 
         stage = 'claim_and_process'
-        result = run_once(
-            SupabaseAPI(
-                os.environ['SUPABASE_URL'],
-                os.environ['SUPABASE_SERVICE_ROLE_KEY']
-            ),
-            r2=r2
+        api = SupabaseAPI(
+            os.environ['SUPABASE_URL'],
+            os.environ['SUPABASE_SERVICE_ROLE_KEY']
         )
-        print(json.dumps(result))
-        if result['status'] in ('failed', 'unconfirmed'):
+        had_failure = False
+        for index in range(args.max_jobs):
+            if index > 0 and time.monotonic() >= claim_deadline:
+                break
+            result = run_once(api, r2=r2)
+            print(json.dumps(result), flush=True)
+            if result['status'] == 'idle':
+                break
+            if result['status'] in ('failed', 'unconfirmed'):
+                had_failure = True
+        if had_failure:
             raise SystemExit(1)
 
     except Exception as exc:

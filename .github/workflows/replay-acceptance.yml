@@ -82,8 +82,7 @@ jobs:
               raise SystemExit('Acceptance credential verification failed; no recording was claimed.') from None
           print('Supabase/R2 credentials and at least 8 GiB scratch verified; no recording claimed.')
           PY
-      - name: Process one queued recording
-        # One job per tick. The existing SQL lease remains authoritative across devices/workers.
+      - name: Process queued recordings
         if: github.event_name == 'schedule' || inputs.operation == 'process-one'
         timeout-minutes: 35
         env:
@@ -93,7 +92,12 @@ jobs:
           R2_RECORDINGS_BUCKET: pule-frame-recordings
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python replay-worker/replay_worker.py
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
+            python replay-worker/replay_worker.py --max-jobs 5
+          else
+            python replay-worker/replay_worker.py
+          fi
 
   cleanup:
     # Independent of long-running processing, so cleanup keeps its five-minute cadence.
