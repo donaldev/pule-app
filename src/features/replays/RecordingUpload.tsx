@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import { assertReplayUploadSize, replayUploadLimit } from '../../data/replayUploadLimit.mjs'
 import { Icon } from '../../components/ui/Icon'
 import { Modal } from '../../components/ui/Primitives'
 import type { ReplayUploadStatus, SavedFrame } from '../../data/remote/database.types'
 import { finalizeRecording, getFrameRecording, removeFrameReplay, getRecordingStatus, queueRecording, reserveRecording, transferRecording } from '../../data/remote/recordingService'
 import { displaySize, inspectRecording, inspectRecordingTiming, sourceToDisplay, validCorners, type Point, type RecordingGeometry, type RecordingTiming } from './recordingGeometry'
-import { compressionLimit, compressionSupport, compressVideo, planCompression, scaleCompressionCorners } from './videoCompression'
+import { compressionSupport, compressVideo, planCompression, scaleCompressionCorners } from './videoCompression'
 import { RecordingCorners } from './RecordingCorners'
 import { videoSampleTypes } from './videoSampleTypes'
 import { clearRecording, hashRecording, readRecording, recordingKey, saveRecording, type RecordingDraft } from './recordingJournal'
@@ -54,7 +55,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
     plan: ReturnType<typeof planCompression>
     timing: RecordingTiming | null
     losesAudio: boolean
-  } | null>(null)
+  } | null | undefined>(undefined)
   const [compressSelected, setCompressSelected] = useState(false)
   const [compressionElapsed, setCompressionElapsed] = useState(0)
   const [compressed, setCompressed] = useState<{
@@ -62,7 +63,12 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   } | null>(null)
   const [recoveryUrl, setRecoveryUrl] = useState('')
   const compressing = busy === 'Compressing recording'
-  const canPrepareCompression = import.meta.env?.VITE_REPLAY_COMPRESSION_PILOT === 'true'
+  const oversizedResume = (status?.source_provider === 'r2' && status.expected_bytes > replayUploadLimit)
+    || (draft?.source_provider === 'r2' && (draft.reservationRequested || draft.uploadId) && draft.bytes > replayUploadLimit)
+  const requiresCompression = draft?.source_provider === 'r2' && !!file && file.size > replayUploadLimit
+  const wantsCompression = requiresCompression || compressSelected
+  const shouldCompress = wantsCompression && !compressed
+  const canPrepareCompression = (requiresCompression || import.meta.env?.VITE_REPLAY_COMPRESSION_PILOT === 'true')
     && !draft?.reservationRequested && !draft?.uploadId && !status
 
   useEffect(() => {
@@ -72,7 +78,8 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
     return () => URL.revokeObjectURL(url)
   }, [compressed])
   useEffect(() => {
-    if (!canPrepareCompression || !file || !geometry || !duration || !compressionSupport()) return
+    if (!canPrepareCompression || !file || !geometry || !duration) return
+    if (!compressionSupport()) { setCompression(null); return }
     let active = true
     const size = displaySize(geometry)
     void Promise.all([videoSampleTypes(file), initialTiming === undefined || file !== initialFile
@@ -109,8 +116,8 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       console.error('Replay save failed', reason)
       if (alive.current) {
         if (localOnly) {
-          setError(cancel.current?.signal.aborted ? 'Compression cancelled. You can still upload the original recording.'
-            : `${reason instanceof Error ? reason.message : 'Compression failed.'} Turn off compression to upload the original recording.`)
+          setError(`${cancel.current?.signal.aborted ? 'Compression cancelled.' : reason instanceof Error ? reason.message : 'Compression failed.'} ${
+            requiresCompression ? 'Try compressing again or choose a smaller MP4.' : 'Retry compression or turn it off to upload the original recording.'}`)
           return
         }
         setError(reason instanceof Error ? reason.message : 'Couldn’t save your video. Check its status before trying again.')
@@ -132,20 +139,26 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
     if (!chosen) return
     await run('Checking recording', async () => {
       if (chosen.type && chosen.type !== 'video/mp4' || !/\.mp4$/i.test(chosen.name) || chosen.size < 1 || chosen.size > (import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 2147483648 : 262144000)) throw Error(`Choose an MP4 recording up to ${import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? '2 GiB' : '250 MiB'}. Export MOV recordings as MP4 first.`)
-      const g = await inspectRecording(chosen); ensureActive()
-      const hash = await hashRecording(chosen, cancel.current!.signal, n => { if (alive.current) setProgress(n) }); ensureActive()
       let previous = draft
       if (previous?.uploadId) {
         const saved = await getRecordingStatus(userId, previous.uploadId); ensureActive()
         if (['cleanup', 'cleaned'].includes(saved.status)) { clearRecording(key, previous); previous = null; setDraft(null); setStatus(null) }
+        else if (saved.source_provider === 'r2') assertReplayUploadSize(saved.expected_bytes)
       }
       const fixed = previous?.reservationRequested || previous?.uploadId
+      const provider = fixed ? previous?.source_provider : import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 'r2' : 'supabase'
+      if (provider === 'r2' && fixed && previous) assertReplayUploadSize(previous.bytes)
+      if (provider === 'r2' && chosen.size > replayUploadLimit && !compressionSupport()) {
+        throw Error('Pule accepts replay uploads up to 100 MB. This browser cannot compress MP4s. Choose a smaller compatible MP4.')
+      }
+      const g = await inspectRecording(chosen); ensureActive()
+      const hash = await hashRecording(chosen, cancel.current!.signal, n => { if (alive.current) setProgress(n) }); ensureActive()
       if (previous && fixed && (previous.hash !== hash || previous.bytes !== chosen.size)) throw Error(previous.compressedName ? `Select ${previous.compressedName} to resume this compressed upload.` : 'Select the exact original file for this saved recording. A different file cannot replace it.')
       const next = (fixed ? previous : null) ?? { source_provider: import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 'r2' : 'supabase', version: 1, userId, frameId: frame.id, operation: crypto.randomUUID(), hash, bytes: chosen.size, geometry: g, corners: [] } satisfies RecordingDraft
       persist(next)
       if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
       objectUrl.current = URL.createObjectURL(chosen)
-      setCompression(null); setDuration(0); setCompressSelected(false); setCompressed(null)
+      setCompression(undefined); setDuration(0); setCompressSelected(false); setCompressed(null)
       setPreview(objectUrl.current); setFile(chosen); setGeometry(g); setCornersConfirmed(false)
       setRawCorners(next.corners)
     })
@@ -186,7 +199,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
         if (alive.current) { setProgress(fraction * 100); setCompressionElapsed(seconds) }
       })
       ensureActive()
-      if (result.blob.size > compressionLimit) throw Error(`The compressed recording is ${(result.blob.size / 1e6).toFixed(2)} MB and exceeds the 100 MB limit.`)
+      if (result.blob.size > replayUploadLimit) throw Error(`The compressed recording is ${(result.blob.size / 1e6).toFixed(2)} MB and exceeds the 100 MB limit.`)
       if (result.blob.size >= file.size) throw Error('Compression did not make this recording smaller.')
       const finished = new File([result.blob], file.name.replace(/\.mp4$/i, '') + '_compressed.mp4', { type: 'video/mp4' })
       const hash = await hashRecording(finished, signal)
@@ -197,14 +210,19 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   async function start() {
     await run('Saving replay', async () => {
       if (!file || !draft || !geometry || !cornersConfirmed || !valid) throw Error('Choose the recording and mark four corners first.')
-      const selected = compressSelected ? compressed : null
+      if (oversizedResume) throw Error('Cancel this oversized upload before starting a new recording.')
+      if (shouldCompress) throw Error('Compress this recording before uploading.')
+      const selected = wantsCompression ? compressed : null
       const uploadFile = selected?.file ?? file
       const uploadGeometry = selected?.geometry ?? geometry
+      if (draft.source_provider === 'r2') assertReplayUploadSize(uploadFile.size)
       // Canvas compression bakes in the original display orientation. Keep the
       // overlay on the original and scale its displayed points for the worker.
       const corners = selected ? scaleCompressionCorners(rawCorners.map(point => sourceToDisplay(point, geometry)), displaySize(geometry), uploadGeometry) : rawCorners
       if (!validCorners(corners, uploadGeometry.width, uploadGeometry.height)) {
-        throw Error('The marked table is too small at the compressed resolution. Upload the original recording.')
+        throw Error(requiresCompression
+          ? 'The marked table is too small at the compressed resolution. Choose a smaller compatible MP4.'
+          : 'The marked table is too small at the compressed resolution. Upload the original recording.')
       }
       const payload = selected && !draft.reservationRequested ? {
         ...draft, operation: selected.operation, bytes: uploadFile.size, hash: selected.hash, compressedName: uploadFile.name
@@ -213,6 +231,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       let current = saved.uploadId ? await getRecordingStatus(userId, saved.uploadId) : await reserveRecording(userId, frame.id, saved.operation, uploadFile.size, saved.hash, saved.source_provider ?? 'supabase')
       ensureActive()
       if (current.frame_id !== frame.id || current.expected_bytes !== saved.bytes) throw Error('Saved recording does not match this frame.')
+      if (current.source_provider === 'r2') assertReplayUploadSize(current.expected_bytes)
       setStatus(current); saved = persist({ ...saved, uploadId: current.upload_id })
       if (['queued', 'processing', 'completed'].includes(current.processing_status ?? '')) {
         if (current.processing_status === 'completed') onPublished()
@@ -229,7 +248,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
         current = await finalizeRecording(userId, current.upload_id, current.source_provider); ensureActive(); setStatus(current)
       }
       if (current.processing_status !== 'uploaded') throw Error('This recording cannot be saved yet. Your previous save has been retained.')
-      const queued = await queueRecording(userId, current.upload_id, saved.corners, saved.geometry.width, saved.geometry.height)
+      const queued = await queueRecording(userId, current, saved.corners, saved.geometry.width, saved.geometry.height)
       ensureActive(); setStatus(queued); onPublished()
     })
   }
@@ -239,26 +258,32 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
     {status?.processing_status === 'failed' && <p role="alert">We couldn’t create this replay. Removing its video before you upload again.</p>}
     {expired && <p role="alert">This recording is no longer active. A new upload will be available after safe removal.</p>}
     {(!processing && !expired && status?.processing_status !== 'failed') && <>
-      {!file && !busy && <label className="recording-file">{draft?.reservationRequested && draft.compressedName ? `Choose ${draft.compressedName} to resume` : 'Choose recording'}<input type="file" accept="video/mp4,.mp4" disabled={!!initial.error} onChange={e => void choose(e.target.files?.[0])} /></label>}
+      {oversizedResume && <p role="alert">This saved upload exceeds 100 MB. Cancel it before starting a new recording.</p>}
+      {!oversizedResume && !busy && (!file || requiresCompression && compression === null) && <label className="recording-file">{file ? 'Choose a smaller recording' : draft?.reservationRequested && draft.compressedName ? `Choose ${draft.compressedName} to resume` : 'Choose recording'}<input type="file" accept="video/mp4,.mp4" disabled={!!initial.error} onChange={e => void choose(e.target.files?.[0])} /></label>}
       {preview && geometry && <RecordingCorners key={preview} src={preview} geometry={geometry} corners={rawCorners}
         confirmed={cornersConfirmed} disabled={!!busy || removing}
         onChange={next => { setRawCorners(next); setCornersConfirmed(false) }}
         onConfirm={() => setCornersConfirmed(true)} onDuration={setDuration} />}
+      {requiresCompression && <p role={compression === null ? 'alert' : 'status'}>
+        Pule accepts replay uploads up to 100 MB. {compression === null
+          ? 'This recording cannot be compressed in this browser. Choose a smaller compatible MP4.'
+          : 'This recording must be compressed before upload.'}
+      </p>}
       {cornersConfirmed && compression && canPrepareCompression && <>
-        <label className="replay-compression-option">
+        {!requiresCompression && <label className="replay-compression-option">
           <input type="checkbox" checked={compressSelected} disabled={!!busy || removing}
             onChange={e => setCompressSelected(e.currentTarget.checked)} />
           Compress video before upload
-        </label>
-        {compressSelected && <p className="annotation">Compression may take about {Math.max(1, Math.ceil(compression.duration / 60))} min, roughly as long as the recording. Keep this screen open. Target: 100 MB or less.{compression.losesAudio && ' This browser will produce a silent video.'}</p>}
+        </label>}
+        {wantsCompression && !compressed && <p className="annotation">Compression may take about {Math.max(1, Math.ceil(compression.duration / 60))} min, roughly as long as the recording. Keep this screen open. Target: 100 MB or less.{compression.losesAudio && ' This browser will produce a silent video.'}</p>}
       </>}
-      {compressSelected && compressed && file && <div>
+      {wantsCompression && compressed && file && <div>
         <p role="status">Original: {(file.size / 1e6).toFixed(2)} MB · Compressed: {(compressed.file.size / 1e6).toFixed(2)} MB</p>
         {recoveryUrl && <p><a className="text-button" href={recoveryUrl} download={compressed.file.name}>Save compressed copy</a> <span className="annotation">Keep a copy if you might need to resume after closing this screen.</span></p>}
       </div>}
-      <button type="button" className="button" disabled={!!busy || removing || !file || !cornersConfirmed || !valid || !!initial.error}
-        onClick={() => void (compressSelected && !compressed ? compress() : start())}>
-        {compressSelected && !compressed ? 'Compress recording' : 'Save & Create Replay'}
+      <button type="button" className="button" disabled={!!busy || removing || !file || !cornersConfirmed || !valid || !!initial.error || !!oversizedResume || (shouldCompress && !compression)}
+        onClick={() => void (shouldCompress ? compress() : start())}>
+        {shouldCompress ? 'Compress recording' : 'Save & Create Replay'}
       </button>
     </>}
     {busy && <div role="status"><p>{compressing ? `Compressing… ${Math.floor(compressionElapsed)} s elapsed` : busy === 'Saving replay' ? 'Uploading… Keep this screen open.' : 'Checking recording…'}</p><progress value={progress} max={100} aria-label={busy} /></div>}

@@ -1,7 +1,7 @@
+import { replayUploadLimit } from '../../data/replayUploadLimit.mjs'
 import { inspectRecording, type Point } from './recordingGeometry'
 import { videoSampleTypes } from './videoSampleTypes'
 
-export const compressionLimit = 100_000_000
 const MAX_HELD_BYTES = 110_000_000
 export const audioBitrate = 128_000
 const MP4_WITH_AUDIO = 'video/mp4;codecs=avc1,mp4a.40.2'
@@ -29,7 +29,7 @@ export type CompressionPlan = { width: number; height: number; videoRate: number
 
 function measurePlan(source: { width: number; height: number; duration: number }, audio: boolean, mime: string): CompressionPlan {
   // Reserve 2% for container overhead and 10% for bitrate variation.
-  const videoRate = Math.min(8_000_000, Math.floor(compressionLimit * 0.88 * 8 / source.duration) - (audio ? audioBitrate : 0))
+  const videoRate = Math.min(8_000_000, Math.floor(replayUploadLimit * 0.88 * 8 / source.duration) - (audio ? audioBitrate : 0))
   if (videoRate < 350_000) throw Error('The recording is too long for a useful result within the 100 MB budget.')
   const shortEdge = videoRate >= 2_000_000 ? 1080 : 720
   const scale = Math.min(1, shortEdge / Math.min(source.width, source.height), shortEdge * 16 / 9 / Math.max(source.width, source.height))

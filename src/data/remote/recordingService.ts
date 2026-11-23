@@ -1,3 +1,4 @@
+import { assertReplayUploadSize } from '../replayUploadLimit.mjs'
 import { r2Command, r2RecordingEnabled, transferR2Recording } from './r2Recording'
 import { Upload } from 'tus-js-client'
 import { actorAuthorization, getSupabase } from './supabase'
@@ -27,10 +28,19 @@ async function command<Name extends Commands>(userId: string, name: Name, args: 
   await actorAuthorization(userId)
   return validateUploadStatus(data)
 }
-export const reserveRecording = (userId: string, frameId: string, operation: string, bytes: number, hash?: string, provider?: string) => (provider === 'r2' || !provider && r2RecordingEnabled()) ? r2Command(userId, { action: 'reserve', operation, frame: frameId, bytes, hash }).then(validateUploadStatus) : command(userId, 'reserve_frame_replay_upload', { p_operation: operation, p_frame: frameId, p_bytes: bytes, p_content_type: 'video/mp4' })
+export async function reserveRecording(userId: string, frameId: string, operation: string, bytes: number, hash?: string, provider?: string) {
+  if (provider === 'r2' || !provider && r2RecordingEnabled()) {
+    assertReplayUploadSize(bytes)
+    return validateUploadStatus(await r2Command(userId, { action: 'reserve', operation, frame: frameId, bytes, hash }))
+  }
+  return command(userId, 'reserve_frame_replay_upload', { p_operation: operation, p_frame: frameId, p_bytes: bytes, p_content_type: 'video/mp4' })
+}
 export const finalizeRecording = (userId: string, id: string, provider?: string) => provider === 'r2' ? r2Command(userId, { action: 'complete', upload: id }).then(validateUploadStatus) : command(userId, 'finalize_frame_replay_upload', { p_upload: id })
 export const getRecordingStatus = (userId: string, id: string) => command(userId, 'get_my_frame_replay_upload', { p_upload: id })
-export const queueRecording = (userId: string, id: string, corners: Point[], width: number, height: number) => command(userId, 'queue_frame_replay_processing', { p_upload: id, p_corners: corners, p_width: width, p_height: height })
+export async function queueRecording(userId: string, recording: ReplayUploadStatus, corners: Point[], width: number, height: number) {
+  if (recording.source_provider === 'r2') assertReplayUploadSize(recording.expected_bytes)
+  return command(userId, 'queue_frame_replay_processing', { p_upload: recording.upload_id, p_corners: corners, p_width: width, p_height: height })
+}
 export function recordingEndpoint(project: string) {
   const url = new URL(project)
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname))) throw Error('Invalid upload endpoint.')

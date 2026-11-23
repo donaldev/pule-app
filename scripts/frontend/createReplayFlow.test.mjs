@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
+import { assertReplayUploadSize, replayUploadLimit } from '../../src/data/replayUploadLimit.mjs'
 const compile=source=>'data:text/javascript;base64,'+Buffer.from(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.React}}).outputText).toString('base64')
 const source=async path=>readFile(new URL('../../src/'+path,import.meta.url),'utf8')
 const geometry=await import(compile(await source('features/replays/recordingGeometry.ts')))
@@ -13,6 +14,7 @@ ui=ui.replaceAll('import.meta.env.VITE_RECORDING_UPLOAD_API_URL',"'https://test/
 const encoderSource=(await source('features/replays/videoCompression.ts')).replace(/^import .*$/gm,'')
 globalThis.scaleCompressionCorners=(await import(compile(encoderSource))).scaleCompressionCorners
 globalThis.geometry=geometry
+globalThis.uploadSizeRules={assertReplayUploadSize,replayUploadLimit}
 const uiPrelude=`const navigator={locks:{request:async(key,options,fn)=>fn({})}};const {displaySize,displayToSource,pointerToDisplay,sourceToDisplay,validCorners}=globalThis.geometry;
 const React={createElement:(type,props,...children)=>({type,props:props??{},children}),Fragment:'fragment'};
 const Modal='modal',RecordingCorners='RecordingCorners';
@@ -23,12 +25,16 @@ const saveRecording=(key,draft)=>{if(globalThis.h.storageFailed)throw Error('Sto
 const hashRecording=async file=> (file.name?.endsWith('_compressed.mp4') ? 'b' : 'a').repeat(64);const inspectRecording=async()=>globalThis.h.g;
 const inspectRecordingTiming=async()=>({source:'mvhd',startMs:100000,durationMs:100000,reliability:'medium'});
 const videoSampleTypes=async()=>({audio:['mp4a']});
-const compressionSupport=()=>true;const compressionLimit=100000000;
+const compressionSupport=()=>globalThis.h.encoderAvailable!==false;
+const {assertReplayUploadSize,replayUploadLimit}=globalThis.uploadSizeRules;
 const planCompression=()=>({audio:true,width:240,height:320});
 const scaleCompressionCorners=globalThis.scaleCompressionCorners;
-const compressVideo=async(_file,_duration,_plan,_signal,progress)=>{
+const compressVideo=async(_file,_duration,_plan,signal,progress)=>{
   globalThis.h.calls.push(['compress']);progress(1,100);
-  return {blob:new Blob([new Uint8Array(50)],{type:'video/mp4'}),geometry:{width:240,height:320,rotation:0}};
+  if(globalThis.h.compressionFailure==='cancel') await new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));
+  if(globalThis.h.compressionFailure==='error') throw Error('Encoding failed.');
+  const blob=globalThis.h.compressionFailure==='oversized' ? {size:replayUploadLimit+1} : new Blob([new Uint8Array(50)],{type:'video/mp4'});
+  return {blob,geometry:{width:240,height:320,rotation:0}};
 };
 const reserveRecording=async(...args)=>{globalThis.h.calls.push(['reserve',...args]);return globalThis.h.response};
 const getRecordingStatus=async()=>globalThis.h.response;
@@ -51,7 +57,7 @@ function mark(render, points) {
  editor(render()).onDuration(100)
  editor(render()).onChange(points.map(point=>geometry.displayToSource(point,h.g)))
  const tree=render()
- assert.equal(button(tree,'Save & Create Replay').props.disabled,true)
+ assert.equal(find(tree,n=>n.type==='button' && (n.children.includes('Save & Create Replay') || n.children.includes('Compress recording'))).props.disabled,true)
  editor(tree).onConfirm()
  return render()
 }
@@ -109,3 +115,75 @@ test('pilot hands off rotated corners and compressed bytes, and retries the same
   assert.deepEqual(queue.slice(3),[[[10,20],[230,20],[230,300],[10,300]],240,320])
  } finally {URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke}
 })
+
+test('an oversized original requires compression even with the optional pilot flag off', async () => {
+ const render=component({status:{...response,expected_bytes:50}})
+ const restore=mockPreviewUrl()
+ try {
+  const tree=await selectOversized(render)
+  assert.equal(button(tree,'Save & Create Replay'),undefined)
+  assert.equal(find(tree,n=>n.type==='input'&&n.props.type==='checkbox'),undefined)
+  assert.match(JSON.stringify(tree),/must be compressed/)
+  button(tree,'Compress recording').props.onClick();await tick()
+  const ready=render()
+  assert.equal(button(ready,'Save & Create Replay').props.disabled,false)
+  button(ready,'Save & Create Replay').props.onClick();await tick()
+  assert.equal(h.calls.find(c=>c[0]==='reserve')[4],50)
+  assert.deepEqual(h.calls.find(c=>c[0]==='transfer'),['transfer',50,'large_compressed.mp4'])
+  assert.ok(h.calls.some(c=>c[0]==='queue'))
+ } finally {restore()}
+})
+
+test('failed, cancelled, unsupported and oversized compression cannot fall back to the oversized original', async () => {
+ const restore=mockPreviewUrl()
+ try {
+  for (const mode of ['error','cancel','oversized','unsupported']) {
+   const render=component()
+   let tree=await selectOversized(render)
+   if(mode==='unsupported'){
+    h.encoderAvailable=false
+    for(const effect of h.effects) effect()
+    await tick();tree=render()
+    assert.equal(button(tree,'Compress recording').props.disabled,true)
+   } else {
+    h.compressionFailure=mode
+    button(tree,'Compress recording').props.onClick();await tick()
+    if(mode==='cancel') { button(render(),'Cancel compression').props.onClick();await tick() }
+    tree=render()
+    assert.equal(button(tree,'Compress recording').props.disabled,false)
+   }
+   assert.ok(find(tree,n=>n.props.role==='alert'))
+   assert.equal(button(tree,'Save & Create Replay'),undefined)
+   assert.equal(h.calls.some(c=>['reserve','transfer','finalize','queue'].includes(c[0])),false)
+  }
+ } finally {restore()}
+})
+
+test('an existing oversized R2 reservation is blocked before selecting a file or resuming', async () => {
+ const render=component({status:{...response,expected_bytes:replayUploadLimit+1},initial:{
+  source_provider:'r2',bytes:replayUploadLimit+1,reservationRequested:true,uploadId:id,
+ }})
+ render();for(const effect of h.effects) effect()
+ await tick()
+ const tree=render()
+ assert.equal(find(tree,n=>n.type==='input'&&n.props.type==='file'),undefined)
+ assert.equal(button(tree,'Save & Create Replay').props.disabled,true)
+ assert.match(JSON.stringify(tree),/saved upload exceeds/)
+ assert.equal(h.calls.some(c=>['reserve','transfer','finalize','queue'].includes(c[0])),false)
+})
+
+function mockPreviewUrl() {
+ const create=URL.createObjectURL,revoke=URL.revokeObjectURL
+ URL.createObjectURL=()=> 'blob:local-preview';URL.revokeObjectURL=()=>{}
+ return ()=>{URL.createObjectURL=create;URL.revokeObjectURL=revoke}
+}
+
+async function selectOversized(render) {
+ const picker=find(render(),n=>n.type==='input'&&n.props.type==='file')
+ picker.props.onChange({target:{files:[{name:'large.mp4',type:'video/mp4',size:replayUploadLimit+1}]}})
+ await tick()
+ mark(render,[[20,20],[620,20],[620,460],[20,460]])
+ for(const effect of h.effects) effect()
+ await tick()
+ return render()
+}
