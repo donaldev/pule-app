@@ -1147,3 +1147,6 @@
 .modal .replay-player-actions .replay-delete { margin:0 0 0 auto; }
 .replay-player-actions .replay-download-action { min-height:44px; color:var(--brass); }
 .replay-download .replay-download-error { max-width:19ch; margin:4px 0; font-size:.8rem; }
+
+.replay-compression-option { display:flex; align-items:center; gap:8px; min-height:44px; }
+.replay-compression-option input { accent-color:var(--brass); }

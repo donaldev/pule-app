@@ -35,7 +35,7 @@ export function MatchRecordingPicker({ userId, frames, eligibleFrames, describeF
   const selected = eligibleFrames.find(frame => frame.id === (chosenId ?? suggestedId))
 
   return <Modal title={confirmed ? `Create replay · Frame ${confirmed.frame.frame_number}` : 'Add frame recording'} onClose={onClose}>
-    {confirmed ? <RecordingUpload userId={userId} frame={confirmed.frame} initialFile={confirmed.file}
+    {confirmed ? <RecordingUpload userId={userId} frame={confirmed.frame} initialFile={confirmed.file} initialTiming={timing ?? (checking ? undefined : null)}
       onPublished={onPublished} onRemoved={onClose} /> : <div className="replay-frame-picker">
       <label>{file ? 'Choose a different recording' : 'Choose recording'}
         <input type="file" accept="video/mp4,.mp4" onChange={event => {
