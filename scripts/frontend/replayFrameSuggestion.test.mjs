@@ -40,6 +40,30 @@ test('leaves ambiguous, distant, missing, weak or occupied recordings for manual
   assert.equal(suggestReplayFrame(embedded(20, 600_000), frames, new Set(['11', '12'])), null)
 })
 
+test('the Pixel recording selects different frames under the two interpretations and requires manual selection', () => {
+  const pixelFrames = [
+    { id: '5', started_at: '2026-11-16T23:48:30.286172Z', completed_at: '2026-11-16T23:55:45.560226Z' },
+    { id: '6', started_at: '2026-11-16T23:56:28.269185Z', completed_at: '2026-11-17T00:02:10.066676Z' },
+  ]
+  const pixelEligible = new Set(['5', '6'])
+  const startMs = Date.parse('2026-11-16T23:55:33Z')
+  const durationMs = 410_414.211
+  const match = timing => suggestReplayFrame(timing, pixelFrames, pixelEligible)
+  assert.equal(match({ startMs, durationMs, source: 'creation-date', reliability: 'high' }), '6')
+  assert.equal(match({ startMs: startMs - durationMs, durationMs, source: 'creation-date', reliability: 'high' }), '5')
+  assert.equal(match({ startMs, durationMs, source: 'mvhd', reliability: 'medium' }), null)
+})
+
+test('mvhd suggests a frame only when both interpretations confidently select it', () => {
+  const timing = { ...embedded(300, 120_000), source: 'mvhd', reliability: 'medium' }
+  assert.equal(suggestReplayFrame(timing, frames, eligible), '10')
+  assert.equal(suggestReplayFrame({ ...timing, startMs: night + 680_000 }, frames, eligible), null)
+  assert.equal(suggestReplayFrame(timing, frames, new Set(['11'])), null)
+  for (const durationMs of [null, 0, -1, NaN, Infinity]) {
+    assert.equal(suggestReplayFrame({ ...timing, durationMs }, frames, eligible), null)
+  }
+})
+
 function u32(value) {
   const field = Buffer.alloc(4)
   field.writeUInt32BE(value)
@@ -72,7 +96,9 @@ function movie({ date, startMs = night - 3600_000, version = 0, lastModified = 0
 }
 
 test('reads offset-bearing QuickTime dates before v0/v1 movie-header timestamps', async () => {
-  assert.deepEqual(await inspectRecordingTiming(movie({ date: '2026-10-25T19:00:00-07:00' }), now), embedded(0, 510_000))
+  const timing = await inspectRecordingTiming(movie({ date: '2026-10-25T19:00:00-07:00' }), now)
+  assert.deepEqual(timing, embedded(0, 510_000))
+  assert.equal(suggestReplayFrame(timing, frames, eligible), '10')
   for (const version of [0, 1]) {
     assert.deepEqual(await inspectRecordingTiming(movie({ version }), now), {
       startMs: night - 3600_000, durationMs: 510_000, source: 'mvhd', reliability: 'medium',

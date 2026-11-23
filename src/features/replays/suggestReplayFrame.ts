@@ -10,6 +10,16 @@ export function suggestReplayFrame(timing: RecordingTiming | null, frames: Frame
   if (!timing || timing.reliability === 'weak') return null
   const { startMs, durationMs } = timing
   if (!Number.isFinite(startMs)) return null
+  if (timing.source !== 'mvhd') return matchInterval(startMs, durationMs, frames, eligibleIds)
+
+  // Movie headers may be stamped at capture start or file finalization.
+  if (durationMs === null || !Number.isFinite(durationMs) || durationMs <= 0) return null
+  const fromStart = matchInterval(startMs, durationMs, frames, eligibleIds)
+  const fromEnd = matchInterval(startMs - durationMs, durationMs, frames, eligibleIds)
+  return fromStart === fromEnd ? fromStart : null
+}
+
+function matchInterval(startMs: number, durationMs: number | null, frames: FrameTiming[], eligibleIds: ReadonlySet<string>): string | null {
   const endMs = startMs + (durationMs ?? 0)
 
   const nearby = frames.flatMap(frame => {
