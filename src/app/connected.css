@@ -1197,3 +1197,28 @@
   .recording-picker-selected { grid-template-columns:auto minmax(0,1fr); }
   .recording-picker-selected .recording-picker-change { grid-column:2; }
 }
+
+.connected-app .live-page .tonights-form { background:var(--surface); border:1px solid var(--line); padding:0 12px; }
+.tonights-form .disclosure-toggle > span { display:grid; gap:3px; min-width:0; text-align:left; }
+.tonights-form-title { color:var(--text); }
+.tonights-form-summary { color:var(--brass); font-size:.82rem; font-weight:500; overflow-wrap:anywhere; }
+.tonights-form-content { display:grid; gap:10px; padding:0 2px 12px; font-size:.875rem; color:var(--text); }
+.tonights-form-content :is(p,h3,ul,ol) { margin:0; }
+.tonights-form-content h3 { font-size:.88rem; margin-bottom:4px; }
+.tonights-form-streak { color:var(--muted); }
+.tonights-form-streak[data-streak=true] { font-weight:700; color:var(--brass); }
+.tonights-form-gauge { display:grid; grid-auto-columns:1fr; grid-auto-flow:column; gap:3px; height:8px; }
+.tonights-form [data-side=first] { background:var(--brass); }
+.tonights-form [data-side=second] { background:#9ec1a7; }
+.tonights-form [data-side=none] { background:var(--line); }
+.tonights-form-gauge span { border-radius:3px; }
+.tonights-form-pair-labels { display:flex; gap:6px 12px; justify-content:space-between; flex-wrap:wrap; margin-top:6px; }
+.tonights-form-pair-labels span, .tonights-form-results strong { overflow-wrap:anywhere; }
+.tonights-form i { display:inline-block; width:7px; height:7px; border-radius:50%; margin-inline-end:5px; vertical-align:middle; }
+.tonights-form-ranked, .tonights-form-results { list-style:none; padding:0; display:grid; gap:5px; }
+.tonights-form-ranked li { display:grid; grid-template-columns:minmax(0,1fr) minmax(44px,1fr) auto; align-items:center; gap:8px; }
+.tonights-form-ranked li > span:first-child { overflow-wrap:anywhere; }
+.tonights-form-bar { height:6px; border-radius:4px; background:var(--line); overflow:hidden; }
+.tonights-form-bar span { display:block; height:100%; border-radius:inherit; background:var(--brass); }
+.tonights-form-results li { display:grid; grid-template-columns:auto minmax(0,1fr); gap:8px; }
+.tonights-form-results li > span { color:var(--muted); }

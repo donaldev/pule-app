@@ -11,7 +11,7 @@ const headingSource=(await readFile(new URL('../../src/components/ui/DisclosureH
 const headingCode=ts.transpileModule('const {React}=globalThis.__removalUi;'+headingSource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.React}}).outputText
 globalThis.__removalUi.MatchDisclosureHeading=(await import('data:text/javascript;base64,'+Buffer.from(headingCode).toString('base64'))).DisclosureHeading
 const source=(await readFile(new URL('../../src/features/connected/SessionView.tsx',import.meta.url),'utf8')).replace(/^import .*$/gm,'')
-const code=ts.transpileModule('const {React,Modal,useState,useEffect,useRef,PageHeading,Eyebrow,displayDate,MatchDisclosureHeading}=globalThis.__removalUi;const MatchMomentumSection=()=>null;const FrameReplays=({children})=>children[0](()=>null);\n'+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.React}}).outputText
+const code=ts.transpileModule('const {React,Modal,useState,useEffect,useRef,PageHeading,Eyebrow,displayDate,MatchDisclosureHeading}=globalThis.__removalUi;const MatchMomentumSection=()=>null;const TonightsForm=()=>null;const FrameReplays=({children})=>children[0](()=>null);\n'+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.React}}).outputText
 const {SessionView}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'))
 const nodes=n=>n&&typeof n==='object'?[n,...n.children.flatMap(nodes)]:[]
 const find=(tree,fn)=>nodes(tree).find(fn)

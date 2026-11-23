@@ -3,6 +3,7 @@ import { Eyebrow, Modal, PageHeading } from '../../components/ui/Primitives'
 import type { FramePair, Pocket, SavedFrame, SessionState, SpecialEvent } from '../../data/remote/database.types'
 import type { ConnectedGame } from './useConnectedGame'
 import { MatchDisclosureHeading } from './MatchDisclosureHeading'
+import { TonightsForm } from './TonightsForm'
 import { MatchMomentumSection } from './MatchMomentumSection'
 import { Icon } from '../../components/ui/Icon'
 import { FrameReplays } from './FrameReplays'
@@ -131,6 +132,7 @@ export function SessionView({ game, sessionId, historyBackTo = '/matches' }: { g
       setFeedback({kind:'frame',key:active.id,winnerId,score:(state.scores[winnerId] ?? 0)+1})
     }} />}
     {open && !active && <PairSetup key={`${state.session.id}:${state.session.revision}`} game={game} state={state} />}
+    {open && <TonightsForm key={sessionId} state={state} />}
     {(!open || completedFrames.length > 0) && <FrameReplays key={`${game.userId}:${sessionId}`} userId={game.userId} sessionId={sessionId} match={{ venue_name: game.options?.venues.find(v => v.id === state.session.venue_id)?.display_name ?? 'Match', occurred_on: state.session.occurred_on }} archiveFrames={!open ? visibleFrames : undefined} describeFrame={f => [`${name(f.winner_id)} won`, f.elapsed_ms === null ? null : duration(f.elapsed_ms)].filter(Boolean).join(' · ')} upload={{ playerId: game.matchupCatalog?.player_id ?? null, detailEligible: state.session.detail_eligible }}>{(watchReplay, replayCount) => {
       const frameList = <>{!visibleFrames.length && <p className="annotation">{state.session.origin === 'imported' ? 'Only the final result is available for this night.' : 'No frame records are available.'}</p>}
       <ol className="timeline">{(open ? completedFrames : visibleFrames).map(f => <li key={f.id} className={`frame-history-row frame-outcome-${frameOutcome(f, game.matchupCatalog?.player_id)}`}><div className="frame-history-header"><button type="button" className="frame-summary-toggle" aria-label={`${expandedFrames.has(f.id) ? 'Hide' : 'Show'} details for frame ${f.frame_number}`} aria-expanded={expandedFrames.has(f.id)} aria-controls={`frame-details-${f.id}`} onClick={() => setExpandedFrames(current => { const next = new Set(current); if (next.has(f.id)) next.delete(f.id); else next.add(f.id); return next })}><span className="frame-number">{f.frame_number}</span><span className="frame-history-info"><strong>{frameOutcome(f, game.matchupCatalog?.player_id) === 'won' ? 'You won' : frameOutcome(f, game.matchupCatalog?.player_id) === 'lost' ? 'You lost' : f.status === 'completed' ? f.winner_id ? `${name(f.winner_id)} won` : 'Winner not recorded' : f.status}</strong><span className="frame-row-meta">{f.elapsed_ms !== null && <small className="frame-duration">{duration(f.elapsed_ms)}</small>}</span></span><span className="frame-disclosure-mark" aria-hidden="true"><Icon name={expandedFrames.has(f.id) ? 'chevronUp' : 'chevronDown'} size={20} /></span></button><div className="frame-replay-action">{watchReplay(f)}</div>
