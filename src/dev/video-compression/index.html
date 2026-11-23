@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pule · Video compression</title>
+    <style>
+      :root { color-scheme: dark; font: 16px/1.5 system-ui,sans-serif; color:#f1ebdd; background:#101a15; }
+      body { margin:0; }
+      main { width:min(680px,calc(100% - 32px)); margin:32px auto; display:grid; gap:16px; }
+      header p, .note { color:#c3c9bd; }
+      h1,h2,p,dl { margin:0; }
+      h1 { font-family: Georgia,serif; font-weight:normal; }
+      h2 { font-size:1.05rem; margin-bottom:8px; }
+      section { min-width:0; padding:16px; border:1px solid #536357; border-radius:12px; background:#18271f; }
+      label { display:grid; gap:8px; margin-bottom:12px; }
+      input { max-width:100%; font:inherit; }
+      dl { display:grid; grid-template-columns:minmax(110px,1fr) 2fr; gap:4px 12px; }
+      dd { margin:0; overflow-wrap:anywhere; }
+      dt { color:#c3c9bd; }
+      button,a { font:inherit; color:#e4c38a; }
+      button { padding:8px 14px; min-height:44px; border:1px solid #c5a46a; border-radius:8px; background:#273b30; }
+      button:disabled { opacity:.55; }
+      progress { display:block; width:100%; margin:8px 0; accent-color:#c5a46a; }
+      video { display:block; width:100%; max-height:55vh; background:#0b0e0c; margin:12px 0; }
+      .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+      [hidden] { display:none!important; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header><h1>Video compression</h1><p>Local Pule development tool. Files stay on this device.</p></header>
+      <section>
+        <h2>Original recording</h2>
+        <label>Choose an MP4 file<input id="file" type="file" accept="video/mp4,.mp4" disabled></label>
+        <dl id="original"></dl>
+      </section>
+      <section>
+        <h2>Compression settings</h2>
+        <dl id="settings"><dt>Maximum output</dt><dd>100 MB</dd></dl>
+        <p class="note">Keep this tab visible and the device awake while encoding.</p>
+        <div class="actions"><button id="start" disabled>Compress</button><button id="cancel" disabled>Cancel</button></div>
+        <progress id="progress" max="1" value="0" hidden aria-label="Compression progress"></progress>
+        <p id="status" role="status">Checking browser capabilities…</p>
+      </section>
+      <section id="result" hidden>
+        <h2>Result</h2>
+        <dl id="output"></dl>
+        <video id="preview" controls playsinline preload="metadata" aria-label="Compressed recording"></video>
+        <a id="download" download>Download compressed MP4</a>
+      </section>
+    </main>
+    <script type="module" src="./prototype.ts"></script>
+  </body>
+</html>
