@@ -936,9 +936,6 @@
 .recording-upload video { width:100%; max-height:40dvh; background:#0B0E0C; }
 .recording-upload .button { width:100%; }
 .recording-upload .button-secondary { color:var(--text); border-color:var(--line); }
-.recording-upload progress { width:100%; accent-color:var(--brass); }
-.recording-file { display:grid; gap:8px; font-weight:700; }
-.recording-file input { max-width:100%; min-height:48px; }
 .recording-corners { display:grid; gap:10px; }
 .recording-timeline { display:flex; flex-wrap:wrap; align-items:end; gap:4px 12px; }
 .recording-timeline label { display:grid; grid-template-columns:1fr auto; flex:1 1 210px; min-width:0; gap:2px 8px; }
@@ -1159,3 +1156,44 @@
 
 .replay-compression-option { display:flex; align-items:center; gap:8px; min-height:44px; }
 .replay-compression-option input { accent-color:var(--brass); }
+
+
+.modal:has(.recording-upload), .modal:has(.replay-frame-picker) {
+  max-height:calc(100dvh - max(10px, env(safe-area-inset-top)) - max(10px, env(safe-area-inset-bottom)));
+  overscroll-behavior:contain;
+}
+.recording-picker {
+  position:relative; display:grid; justify-items:center; gap:8px; min-width:0;
+  padding:16px; text-align:center; color:var(--text); background:var(--walnut);
+  border:1px solid var(--line); border-radius:var(--radius-control); cursor:pointer;
+}
+.recording-picker-input {
+  position:absolute; width:1px; height:1px; padding:0; overflow:hidden;
+  clip-path:inset(50%); white-space:nowrap;
+}
+.recording-picker:focus-within { outline:2px solid var(--brass); outline-offset:3px; }
+.recording-picker:has(input:disabled) { cursor:default; opacity:.65; }
+.recording-picker-icon { display:grid; place-items:center; color:var(--brass); }
+.recording-picker-detail { display:grid; min-width:0; gap:2px; overflow-wrap:anywhere; }
+.recording-picker-detail > span { color:var(--muted); font-size:.875rem; }
+.recording-picker .button { justify-content:center; min-height:44px; width:100%; }
+.recording-picker-selected { grid-template-columns:auto minmax(0,1fr) auto; align-items:center; justify-items:start; text-align:left; min-height:58px; padding:8px 12px; }
+.recording-picker-change { color:var(--brass); font-weight:700; min-height:44px; display:grid; align-items:center; }
+.replay-frame-picker label.recording-picker-selected { gap:8px; }
+.recording-progress { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:6px 8px; }
+.recording-progress [role=status] { grid-column:1/-1; min-width:0; }
+.recording-progress progress { width:100%; height:8px; border:0; border-radius:8px; accent-color:var(--brass); }
+.recording-progress progress:indeterminate { grid-column:1/-1; }
+.recording-progress small { color:var(--muted); font-variant-numeric:tabular-nums; }
+.recording-table [data-selected] .recording-marker-dot { fill:#fff4d6; stroke:#bc8a45; stroke-width:3; }
+.recording-corner-adjust { display:flex; flex-wrap:wrap; align-items:center; gap:0 8px; }
+.recording-corner-adjust > div { display:flex; flex-wrap:wrap; }
+.recording-corner-adjust button { min-width:44px; min-height:44px; padding:4px 8px; }
+.modal:has(.recording-upload) h2, .modal:has(.replay-frame-picker) h2 { font-size:18px; line-height:1.3; }
+.modal :is(.recording-upload, .replay-frame-picker) .annotation { color:#b9c5b7; }
+.recording-progress progress[value]::-webkit-progress-bar { background:#0b1510; border-radius:8px; }
+.recording-progress progress[value]::-webkit-progress-value { background:var(--brass); border-radius:8px; }
+@media (max-width:420px) {
+  .recording-picker-selected { grid-template-columns:auto minmax(0,1fr); }
+  .recording-picker-selected .recording-picker-change { grid-column:2; }
+}

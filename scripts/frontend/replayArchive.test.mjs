@@ -80,15 +80,15 @@ const uploadSource = uploadText.replace(/^import .*$/gm, '')
 const uploadPrelude = prelude.replace(",RecordingUploadAction='RecordingUploadAction'", '') + 'const getFrameRecording=async()=>null;'
 const uploadCompiled = ts.transpileModule(uploadPrelude + uploadSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022, jsx: ts.JsxEmit.React } }).outputText
 const { RecordingUploadAction } = await import('data:text/javascript;base64,' + Buffer.from(uploadCompiled).toString('base64'))
-test('Add recording launches existing file picker; queued and failed recordings retain management access',()=>{
- let picks=0
+test('Add recording opens the same upload dialog used for managing an existing recording',()=>{
  for (const status of [null,'queued','processing','failed']) {
   const pending=status?{processing_status:status}:null
-  globalThis.archive={states:[null,{current:{click(){picks++}}},pending,true,false,false],cursor:0}
+  globalThis.archive={states:[pending,true,false,false],cursor:0}
   const render=()=>{archive.cursor=0;return RecordingUploadAction({userId:'account',frame:frame(1),onPublished(){}})}
   let tree=render()
-  if (!pending) {button(tree,'Add recording').props.onClick();assert.equal(picks,1);assert.equal(nodes(tree).filter(n=>n.type==='button').length,1)}
-  else {const action=find(tree,n=>n.type==='button');action.props.onClick();tree=render();assert.ok(find(tree,n=>n.type==='Modal'));assert.equal(button(tree,'Add recording'),undefined)}
+  const action=find(tree,n=>n.type==='button');action.props.onClick();tree=render()
+  assert.ok(find(tree,n=>n.type==='Modal'))
+  assert.equal(find(tree,n=>n.props.initialStatus===pending)?.props.initialStatus,pending)
  }
 })
 

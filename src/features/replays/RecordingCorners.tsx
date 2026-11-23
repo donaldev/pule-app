@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { displaySize, displayToSource, sourceToDisplay, validCorners, type Point, type RecordingGeometry } from './recordingGeometry'
-import { clampViewport, fitScale, initialViewport, limitToImage, replaceCorner, stageToImage, zoomViewport, type Viewport } from './cornerViewport'
+import { clampViewport, fitScale, imageToStage, initialViewport, limitToImage, replaceCorner, stageToImage, zoomViewport, type Viewport } from './cornerViewport'
 
 type Gesture =
   | { kind: 'single'; start: Point; view: Viewport; marker: number | null; moved: boolean }
@@ -37,6 +37,7 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
   const pointers = useRef(new Map<number, Point>())
   const gesture = useRef<Gesture | null>(null)
   const viewport = useRef(initialViewport)
+  const lastTap = useRef<Point | null>(null)
   const [view, setView] = useState(initialViewport)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [duration, setDuration] = useState(0)
@@ -44,6 +45,7 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
   const [ready, setReady] = useState(false)
   const [seeking, setSeeking] = useState(false)
   const [error, setError] = useState('')
+  const [selectedCorner, setSelectedCorner] = useState<number | null>(null)
   const [drag, setDrag] = useState<{ index: number; point: Point } | null>(null)
   const image = displaySize(geometry)
   const { width, height } = image
@@ -191,22 +193,37 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
     const bounds = event.currentTarget.getBoundingClientRect()
     const point = local(event, bounds)
     if (action.marker !== null) {
+      setSelectedCorner(action.marker)
       if (action.moved || distance(action.start, point) >= TOUCH_SLOP) {
         onChange(replaceCorner(corners, action.marker, markerAt(action, action.marker, point, bounds)))
       }
-    } else if (!action.moved && distance(action.start, point) < TOUCH_SLOP && corners.length < 4) {
+    } else if (!action.moved && distance(action.start, point) < TOUCH_SLOP) {
       const [x, y] = stageToImage(point, viewport.current, bounds, image)
       if (x >= 0 && x < width && y >= 0 && y < height) {
-        onChange([...corners, displayToSource(limitToImage([x, y], image), geometry)])
+        lastTap.current = limitToImage([x, y], image)
+        setSelectedCorner(null)
+        if (corners.length < 4) onChange([...corners, displayToSource(lastTap.current, geometry)])
       }
     }
   }
 
+  const selectedPoint = selectedCorner === null ? undefined : corners[selectedCorner]
+
   function zoomBy(factor: number) {
     const bounds = stage.current?.getBoundingClientRect()
-    if (!bounds) return
+    if (!bounds?.width || !bounds.height) return
     const center: Point = [bounds.width / 2, bounds.height / 2]
-    updateView(zoomViewport(viewport.current, viewport.current.zoom * factor, center, center, bounds, image))
+    const focal = factor > 1 && (selectedPoint ? sourceToDisplay(selectedPoint, geometry) : lastTap.current)
+    const current = viewport.current
+    updateView(zoomViewport(current, current.zoom * factor,
+      focal ? imageToStage(focal, current, bounds, image) : center, center, bounds, image))
+  }
+
+  function nudge(dx: number, dy: number) {
+    if (selectedCorner === null || !selectedPoint || seeking || disabled || drag || pointers.current.size) return
+    const [x, y] = sourceToDisplay(selectedPoint, geometry)
+    const point = displayToSource(limitToImage([x + dx, y + dy], image), geometry)
+    if (point[0] !== selectedPoint[0] || point[1] !== selectedPoint[1]) onChange(replaceCorner(corners, selectedCorner, point))
   }
 
   const visibleCorners = (drag ? replaceCorner(corners, drag.index, drag.point) : corners).map(point => sourceToDisplay(point, geometry))
@@ -215,7 +232,7 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
   return <section className="recording-corners" aria-label="Replay table corners">
     <video ref={video} src={src} hidden playsInline preload="auto" onLoadedData={finishSeek} onSeeked={finishSeek}
       onError={() => fail('This browser cannot play the selected video. Export a compatible MP4.')} />
-    <p className="annotation">Find a clear view of the table. Pinch to zoom, then tap the corners in order around the table. Drag a marker to adjust it.</p>
+    <p className="annotation">Find a clear view of the table. Tap the corners in order around the table. Pinch to zoom, then tap a marker for fine adjustments.</p>
     <div className="recording-timeline">
       <label>Choose a clear video frame <span>{timestamp(time)}</span>
         <input type="range" min={0} max={Math.max(0, duration - 0.001)} step="any" value={time} disabled={!duration || disabled}
@@ -237,7 +254,7 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
         <svg viewBox={`0 0 ${width} ${height}`} aria-label="Table corner selection" role="img" preserveAspectRatio="none">
           {visibleCorners.length === 4 ? <polygon points={visibleCorners.map(point => point.join(',')).join(' ')} />
             : <polyline points={visibleCorners.map(point => point.join(',')).join(' ')} />}
-          {visibleCorners.map(([x, y], index) => <g key={index} data-corner-index={index}>
+          {visibleCorners.map(([x, y], index) => <g key={index} data-corner-index={index} data-selected={selectedCorner === index || undefined}>
             <circle cx={x} cy={y} r={22 / markerScale} fill="transparent" className="recording-marker-hit" />
             <circle cx={x} cy={y} r={11 / markerScale} className="recording-marker-dot" />
             <text x={x} y={y} dominantBaseline="central" textAnchor="middle" fontSize={13 / markerScale}>{index + 1}</text>
@@ -250,9 +267,18 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
       <button type="button" className="text-button" aria-label="Zoom out" disabled={view.zoom === 1 || !ready || disabled} onClick={() => zoomBy(1 / 1.5)}>−</button>
       <button type="button" className="text-button" aria-label="Zoom in" disabled={view.zoom === 8 || !ready || disabled} onClick={() => zoomBy(1.5)}>+</button>
       <button type="button" className="text-button" disabled={view.zoom === 1 || disabled} onClick={() => updateView(initialViewport)}>Reset zoom</button>
-      <button type="button" className="text-button" disabled={!corners.length || disabled} onClick={() => onChange(corners.slice(0, -1))}>Undo</button>
-      <button type="button" className="text-button" disabled={!corners.length || disabled} onClick={() => onChange([])}>Reset corners</button>
+      <button type="button" className="text-button" disabled={!corners.length || disabled} onClick={() => { if (selectedCorner === corners.length - 1) setSelectedCorner(null); onChange(corners.slice(0, -1)) }}>Undo</button>
+      <button type="button" className="text-button" disabled={!corners.length || disabled} onClick={() => { setSelectedCorner(null); lastTap.current = null; onChange([]) }}>Reset corners</button>
     </div>
+    {selectedPoint && selectedCorner !== null && <div className="recording-corner-adjust">
+      <strong>Adjust corner {selectedCorner + 1}</strong>
+      <div role="group" aria-label={`Adjust corner ${selectedCorner + 1} by one pixel`}>
+        <button type="button" className="text-button" aria-label="Move corner left" disabled={disabled || seeking} onClick={() => nudge(-1, 0)}>←</button>
+        <button type="button" className="text-button" aria-label="Move corner up" disabled={disabled || seeking} onClick={() => nudge(0, -1)}>↑</button>
+        <button type="button" className="text-button" aria-label="Move corner down" disabled={disabled || seeking} onClick={() => nudge(0, 1)}>↓</button>
+        <button type="button" className="text-button" aria-label="Move corner right" disabled={disabled || seeking} onClick={() => nudge(1, 0)}>→</button>
+      </div>
+    </div>}
     <p className="annotation" aria-live="polite">{corners.length} of 4 corners marked.{corners.length === 4 && !valid && ' Mark four distinct corners in order around the table.'}</p>
     <button type="button" className="button button-secondary" disabled={!valid || !ready || seeking || !!drag || confirmed || disabled}
       onClick={onConfirm}>{confirmed ? 'Corners confirmed' : 'Confirm corners'}</button>

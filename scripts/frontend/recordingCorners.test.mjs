@@ -15,7 +15,7 @@ const viewport = await load('cornerViewport.ts')
 const geometry = await load('recordingGeometry.ts')
 globalThis.cornerHelpers = { ...viewport, ...geometry }
 const { RecordingCorners } = await load('RecordingCorners.tsx', `
-const {displaySize,displayToSource,sourceToDisplay,validCorners,clampViewport,fitScale,initialViewport,limitToImage,replaceCorner,stageToImage,zoomViewport}=globalThis.cornerHelpers;
+const {displaySize,displayToSource,sourceToDisplay,validCorners,clampViewport,fitScale,imageToStage,initialViewport,limitToImage,replaceCorner,stageToImage,zoomViewport}=globalThis.cornerHelpers;
 const HTMLMediaElement={HAVE_CURRENT_DATA:2};
 const React={Fragment:'fragment',createElement:(type,props,...children)=>{
   if(props?.ref) props.ref.current=globalThis.cornerTest.refs[type==='div'?'stage':type];
@@ -125,4 +125,40 @@ test('pinching and dragging the viewport never add corners; a dragged marker cha
   assert.notDeepEqual(h.props.corners[0], before[0])
   assert.deepEqual(h.props.corners.slice(1), before.slice(1))
   assert.equal(h.props.confirmed, false)
+})
+
+test('selecting a marker focuses zoom and nudges one original pixel in the displayed direction',()=>{
+ const h=harness()
+ h.media('onLoadedData')
+ const picture={width:720,height:1280}
+ const source=geometry.displayToSource([400,850],h.props.geometry)
+ h.props.corners=[source]
+ h.props.confirmed=true
+ const [x,y]=viewport.imageToStage([400,850],viewport.initialViewport,bounds,picture)
+ h.pointer('onPointerDown',1,x,y,0)
+ h.pointer('onPointerUp',1,x,y,0)
+ assert.equal(h.changes.length,0)
+ assert.ok(find(h.render(),n=>n.props['data-selected']===true))
+ const action=label=>find(h.render(),n=>n.props['aria-label']===label).props.onClick()
+ action('Zoom in')
+ const focal=viewport.zoomViewport(viewport.initialViewport,1.5,[x,y],[180,240],bounds,picture)
+ assert.equal(find(h.render(),n=>n.props.className==='recording-table-layer').props.style.transform,
+  `translate(${focal.x}px, ${focal.y}px) scale(1.5)`)
+ assert.deepEqual(h.props.corners,[source])
+ action('Move corner up')
+ assert.deepEqual(h.props.corners,[geometry.displayToSource([400,849],h.props.geometry)])
+ assert.equal(h.props.confirmed,false)
+})
+
+test('a pinch that begins on an existing marker cancels its drag',()=>{
+ const h=harness()
+ h.media('onLoadedData')
+ h.props.corners=[geometry.displayToSource([360,640],h.props.geometry)]
+ h.pointer('onPointerDown',1,180,240,0)
+ h.pointer('onPointerMove',1,190,240,0)
+ h.pointer('onPointerDown',2,220,240)
+ h.pointer('onPointerMove',2,310,240)
+ h.pointer('onPointerUp',2,310,240)
+ h.pointer('onPointerUp',1,190,240)
+ assert.equal(h.changes.length,0)
 })

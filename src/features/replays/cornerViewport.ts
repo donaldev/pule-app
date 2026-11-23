@@ -32,6 +32,12 @@ export function stageToImage([x, y]: Point, view: Viewport, stage: Size, image: 
     (y - stage.height / 2 - view.y) / scale + image.height / 2]
 }
 
+export function imageToStage([x, y]: Point, view: Viewport, stage: Size, image: Size): Point {
+  const scale = fitScale(stage, image) * view.zoom
+  return [(x - image.width / 2) * scale + stage.width / 2 + view.x,
+    (y - image.height / 2) * scale + stage.height / 2 + view.y]
+}
+
 export function limitToImage([x, y]: Point, image: Size): Point {
   return [Math.min(image.width - 1, Math.max(0, x)), Math.min(image.height - 1, Math.max(0, y))]
 }

@@ -6,13 +6,12 @@ import type { ReplayUploadStatus, SavedFrame } from '../../data/remote/database.
 import { finalizeRecording, getFrameRecording, removeFrameReplay, getRecordingStatus, queueRecording, reserveRecording, transferRecording } from '../../data/remote/recordingService'
 import { displaySize, inspectRecording, inspectRecordingTiming, sourceToDisplay, validCorners, type Point, type RecordingGeometry, type RecordingTiming } from './recordingGeometry'
 import { compressionSupport, compressVideo, planCompression, scaleCompressionCorners } from './videoCompression'
+import { RecordingFilePicker, RecordingProgress, recordingSize } from './RecordingFilePicker'
 import { RecordingCorners } from './RecordingCorners'
 import { videoSampleTypes } from './videoSampleTypes'
 import { clearRecording, hashRecording, readRecording, recordingKey, saveRecording, type RecordingDraft } from './recordingJournal'
 
 export function RecordingUploadAction({ userId, frame, onPublished }: { userId: string; frame: SavedFrame; onPublished: () => void }) {
-  const [selected, setSelected] = useState<File | null>(null)
-  const picker = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<ReplayUploadStatus | null>(null)
   const [checked, setChecked] = useState(false)
   const [checkError, setCheckError] = useState(false)
@@ -24,13 +23,12 @@ export function RecordingUploadAction({ userId, frame, onPublished }: { userId: 
   }, [userId, frame.id])
   return <>
     {!checked ? <p role="status">Checking recording…</p> : checkError ? <p role="alert">Recording availability couldn’t be checked. Close and reopen these details to try again.</p> : pending ? <button type="button" className="text-button replay-pending" onClick={() => setShowPending(true)}>{pending.status === 'cleanup' || pending.processing_status === 'failed' ? 'Removing recording…' : pending.status === 'reserved' ? 'Uploading' : 'Processing replay'}</button>
-      : <button type="button" className="button frame-recording-action" onClick={() => picker.current?.click()}><Icon name="upload" /><span>Add recording</span></button>}
-    <input ref={picker} type="file" accept="video/mp4,.mp4" hidden aria-label="Choose frame recording" onChange={e => { const file = e.target.files?.[0]; if (file) { setSelected(file) }; e.target.value = '' }} />
-    {(selected || showPending) && <Modal title={`Create replay · Frame ${frame.frame_number}`} onClose={() => { setSelected(null); setShowPending(false); void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }}>
-      <RecordingUpload key={`${userId}:${frame.id}`} userId={userId} frame={frame} onPublished={() => { void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }} initialFile={selected ?? undefined} initialStatus={pending} onRemoved={() => { setSelected(null); setShowPending(false); setPending(null); onPublished() }} />
+      : <button type="button" className="button frame-recording-action" onClick={() => setShowPending(true)}><Icon name="upload" /><span>Add recording</span></button>}
+    {showPending && <Modal title={`Create replay · Frame ${frame.frame_number}`} onClose={() => { setShowPending(false); void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }}>
+      <RecordingUpload key={`${userId}:${frame.id}`} userId={userId} frame={frame} onPublished={() => { void getFrameRecording(userId, frame.id).then(setPending).catch(() => {}); onPublished() }} initialStatus={pending} onRemoved={() => { setShowPending(false); setPending(null); onPublished() }} />
     </Modal>}</>
 }
-export function RecordingUpload({ userId, frame, onPublished, initialFile, initialTiming, initialStatus, onRemoved }: { userId: string; frame: SavedFrame; onPublished: () => void; initialFile?: File; initialTiming?: RecordingTiming | null; initialStatus?: ReplayUploadStatus | null; onRemoved?: () => void }) {
+export function RecordingUpload({ userId, frame, onPublished, initialFile, initialTiming, initialStatus, onRemoved, onReplaceVideo }: { userId: string; frame: SavedFrame; onPublished: () => void; initialFile?: File; initialTiming?: RecordingTiming | null; initialStatus?: ReplayUploadStatus | null; onRemoved?: () => void; onReplaceVideo?: (file: File) => void }) {
   const key = recordingKey(import.meta.env.VITE_SUPABASE_URL, userId, frame.id)
   const [initial] = useState(() => { try { return { draft: readRecording(key, userId, frame.id), error: '' } } catch { return { draft: null, error: 'Recording recovery could not be read. Use the original browser; nothing was discarded.' } } })
   const [draft, setDraft] = useState<RecordingDraft | null>(initial.draft)
@@ -41,10 +39,10 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   const [rawCorners, setRawCorners] = useState<Point[]>([])
   const [preview, setPreview] = useState('')
   const [cornersConfirmed, setCornersConfirmed] = useState(false)
-  const [busy, setBusy] = useState('')
+  const [busy, setBusy] = useState<'reading' | 'preparing' | 'compressing' | 'checking-output' | 'uploading' | 'finishing' | ''>('')
   const [removing, setRemoving] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
-  const [progress, setProgress] = useState(0)
+  const [progress, setProgress] = useState<number>()
   const [error, setError] = useState(initial.error)
   const alive = useRef(true), locked = useRef(false), cancel = useRef<AbortController | null>(null)
   const transfer = useRef<ReturnType<typeof transferRecording> | null>(null)
@@ -62,10 +60,12 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
     file: File; geometry: RecordingGeometry; hash: string; operation: string
   } | null>(null)
   const [recoveryUrl, setRecoveryUrl] = useState('')
-  const compressing = busy === 'Compressing recording'
+  const compressing = busy === 'compressing' || busy === 'checking-output'
+  const sourceProvider = draft ? draft.source_provider ?? 'supabase' : import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 'r2' : 'supabase'
+  const savedUpload = !!(status || draft?.reservationRequested || draft?.uploadId)
   const oversizedResume = (status?.source_provider === 'r2' && status.expected_bytes > replayUploadLimit)
     || (draft?.source_provider === 'r2' && (draft.reservationRequested || draft.uploadId) && draft.bytes > replayUploadLimit)
-  const requiresCompression = draft?.source_provider === 'r2' && !!file && file.size > replayUploadLimit
+  const requiresCompression = sourceProvider === 'r2' && !!file && file.size > replayUploadLimit
   const wantsCompression = requiresCompression || compressSelected
   const shouldCompress = wantsCompression && !compressed
   const canPrepareCompression = (requiresCompression || import.meta.env?.VITE_REPLAY_COMPRESSION_PILOT === 'true')
@@ -102,9 +102,9 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   }, [initial.draft?.uploadId, userId])
   function ensureActive() { if (!alive.current) throw Error('Recording closed.'); cancel.current?.signal.throwIfAborted() }
   function persist(next: RecordingDraft) { saveRecording(key, next); setDraft(next); return next }
-  async function run(label: string, task: () => Promise<void>, localOnly = false) {
+  async function run(label: typeof busy, task: () => Promise<void>, localOnly = false) {
     if (locked.current || initial.error || removing) return
-    locked.current = true; setCheckedAt(Date.now()); setBusy(label); setError(''); setProgress(0); cancel.current = new AbortController()
+    locked.current = true; setCheckedAt(Date.now()); setBusy(label); setError(''); setProgress(undefined); cancel.current = new AbortController()
     try {
       if (localOnly) { await task(); return }
       if (!navigator.locks) throw Error('This browser cannot safely coordinate recording uploads. Use a current Safari or Chrome browser.')
@@ -137,7 +137,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   }
   async function choose(chosen?: File) {
     if (!chosen) return
-    await run('Checking recording', async () => {
+    await run('reading', async () => {
       if (chosen.type && chosen.type !== 'video/mp4' || !/\.mp4$/i.test(chosen.name) || chosen.size < 1 || chosen.size > (import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 2147483648 : 262144000)) throw Error(`Choose an MP4 recording up to ${import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? '2 GiB' : '250 MiB'}. Export MOV recordings as MP4 first.`)
       let previous = draft
       if (previous?.uploadId) {
@@ -152,15 +152,20 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
         throw Error('Pule accepts replay uploads up to 100 MB. This browser cannot compress MP4s. Choose a smaller compatible MP4.')
       }
       const g = await inspectRecording(chosen); ensureActive()
-      const hash = await hashRecording(chosen, cancel.current!.signal, n => { if (alive.current) setProgress(n) }); ensureActive()
-      if (previous && fixed && (previous.hash !== hash || previous.bytes !== chosen.size)) throw Error(previous.compressedName ? `Select ${previous.compressedName} to resume this compressed upload.` : 'Select the exact original file for this saved recording. A different file cannot replace it.')
-      const next = (fixed ? previous : null) ?? { source_provider: import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 'r2' : 'supabase', version: 1, userId, frameId: frame.id, operation: crypto.randomUUID(), hash, bytes: chosen.size, geometry: g, corners: [] } satisfies RecordingDraft
-      persist(next)
+      if (previous && fixed) {
+        setBusy('preparing')
+        const hash = await hashRecording(chosen, cancel.current!.signal, n => { if (alive.current) setProgress(n) })
+        ensureActive()
+        if (previous.hash !== hash || previous.bytes !== chosen.size) throw Error(previous.compressedName ? `Select ${previous.compressedName} to resume this compressed upload.` : 'Select the exact original file for this saved recording. A different file cannot replace it.')
+      }
+      // New selections only need an upload identity once the final bytes are chosen.
+      const next = fixed ? previous : null
+      setDraft(next)
       if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
       objectUrl.current = URL.createObjectURL(chosen)
       setCompression(undefined); setDuration(0); setCompressSelected(false); setCompressed(null)
       setPreview(objectUrl.current); setFile(chosen); setGeometry(g); setCornersConfirmed(false)
-      setRawCorners(next.corners)
+      setRawCorners(next?.corners ?? [])
     })
   }
   useEffect(() => {
@@ -193,10 +198,14 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   async function compress() {
     if (!file || !compression || !cornersConfirmed || !valid) return
     setCompressionElapsed(0)
-    await run('Compressing recording', async () => {
+    await run('compressing', async () => {
       const signal = cancel.current!.signal
       const result = await compressVideo(file, compression.duration, compression.plan, signal, (fraction, seconds) => {
-        if (alive.current) { setProgress(fraction * 100); setCompressionElapsed(seconds) }
+        if (alive.current) {
+          setProgress(fraction >= 1 ? undefined : fraction * 100)
+          setCompressionElapsed(seconds)
+          if (fraction >= 1) setBusy('checking-output')
+        }
       })
       ensureActive()
       if (result.blob.size > replayUploadLimit) throw Error(`The compressed recording is ${(result.blob.size / 1e6).toFixed(2)} MB and exceeds the 100 MB limit.`)
@@ -208,14 +217,14 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
     }, true)
   }
   async function start() {
-    await run('Saving replay', async () => {
-      if (!file || !draft || !geometry || !cornersConfirmed || !valid) throw Error('Choose the recording and mark four corners first.')
+    await run('preparing', async () => {
+      if (!file || !geometry || !cornersConfirmed || !valid) throw Error('Choose the recording and mark four corners first.')
       if (oversizedResume) throw Error('Cancel this oversized upload before starting a new recording.')
       if (shouldCompress) throw Error('Compress this recording before uploading.')
       const selected = wantsCompression ? compressed : null
       const uploadFile = selected?.file ?? file
       const uploadGeometry = selected?.geometry ?? geometry
-      if (draft.source_provider === 'r2') assertReplayUploadSize(uploadFile.size)
+      if (sourceProvider === 'r2') assertReplayUploadSize(uploadFile.size)
       // Canvas compression bakes in the original display orientation. Keep the
       // overlay on the original and scale its displayed points for the worker.
       const corners = selected ? scaleCompressionCorners(rawCorners.map(point => sourceToDisplay(point, geometry)), displaySize(geometry), uploadGeometry) : rawCorners
@@ -224,9 +233,15 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
           ? 'The marked table is too small at the compressed resolution. Choose a smaller compatible MP4.'
           : 'The marked table is too small at the compressed resolution. Upload the original recording.')
       }
-      const payload = selected && !draft.reservationRequested ? {
-        ...draft, operation: selected.operation, bytes: uploadFile.size, hash: selected.hash, compressedName: uploadFile.name
-      } : draft
+      let payload = draft
+      if (!payload) {
+        const hash = selected?.hash ?? await hashRecording(uploadFile, cancel.current!.signal, n => { if (alive.current) setProgress(n) })
+        ensureActive()
+        payload = { version: 1, userId, frameId: frame.id, source_provider: sourceProvider,
+          operation: selected?.operation ?? crypto.randomUUID(), bytes: uploadFile.size, hash,
+          ...(selected ? { compressedName: uploadFile.name } : {}), geometry: uploadGeometry, corners }
+      }
+      setBusy('finishing'); setProgress(undefined)
       let saved = persist({ ...payload, geometry: uploadGeometry, corners, reservationRequested: true })
       let current = saved.uploadId ? await getRecordingStatus(userId, saved.uploadId) : await reserveRecording(userId, frame.id, saved.operation, uploadFile.size, saved.hash, saved.source_provider ?? 'supabase')
       ensureActive()
@@ -241,10 +256,12 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       if (current.status === 'reserved') {
         if (Date.parse(current.expires_at) <= Date.now()) throw Error('This recording has expired. It must finish safe cleanup before another recording can be saved.')
         if (!saved.transferred) {
+          setBusy('uploading'); setProgress(0)
           transfer.current = transferRecording(uploadFile, userId, current, saved.hash, n => { if (alive.current) setProgress(n) })
           await transfer.current.start(); ensureActive()
           saved = persist({ ...saved, transferred: true })
         }
+        setBusy('finishing'); setProgress(undefined)
         current = await finalizeRecording(userId, current.upload_id, current.source_provider); ensureActive(); setStatus(current)
       }
       if (current.processing_status !== 'uploaded') throw Error('This recording cannot be saved yet. Your previous save has been retained.')
@@ -252,14 +269,26 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       ensureActive(); setStatus(queued); onPublished()
     })
   }
+  const stages = {
+    reading: { title: 'Reading video details', detail: 'Checking the MP4 format and orientation.' },
+    preparing: { title: 'Preparing video', detail: 'Checking the exact file before upload.' },
+    compressing: { title: 'Compressing on your device', detail: `${Math.floor(compressionElapsed)} s elapsed. Keep Pule visible and your screen awake.` },
+    'checking-output': { title: 'Checking compressed video', detail: 'Verifying the format and file size.' },
+    uploading: { title: 'Uploading video', detail: 'Sending your recording to Pule.' },
+    finishing: { title: 'Setting up your replay', detail: 'Checking the saved recording and upload status.' },
+  }
   return <section className="recording-upload" aria-label="Frame recording upload">
-    <p>Choose an existing video of the whole frame {frame.frame_number}.</p>
-    {processing && <p role="status">{status?.processing_status === 'completed' ? 'Your replay is ready.' : 'Processing replay…'} You can leave this screen. It will appear here after processing finishes.</p>}
+    {!file && !savedUpload && <p>Choose an MP4 video of Frame {frame.frame_number}. Then find a clear view and mark the table.</p>}
+    {processing && <p role="status">{status?.processing_status === 'completed' ? 'Your replay is ready.' : 'Upload complete. Pule is creating your replay.'} {status?.processing_status !== 'completed' && 'You can leave this screen. The replay will appear when it’s ready.'}</p>}
     {status?.processing_status === 'failed' && <p role="alert">We couldn’t create this replay. Removing its video before you upload again.</p>}
     {expired && <p role="alert">This recording is no longer active. A new upload will be available after safe removal.</p>}
     {(!processing && !expired && status?.processing_status !== 'failed') && <>
       {oversizedResume && <p role="alert">This saved upload exceeds 100 MB. Cancel it before starting a new recording.</p>}
-      {!oversizedResume && !busy && (!file || requiresCompression && compression === null) && <label className="recording-file">{file ? 'Choose a smaller recording' : draft?.reservationRequested && draft.compressedName ? `Choose ${draft.compressedName} to resume` : 'Choose recording'}<input type="file" accept="video/mp4,.mp4" disabled={!!initial.error} onChange={e => void choose(e.target.files?.[0])} /></label>}
+      {!oversizedResume && (!file || !savedUpload) && <RecordingFilePicker file={file}
+        disabled={!!busy || removing || !!initial.error}
+        savedName={savedUpload ? draft?.compressedName : undefined}
+        onChoose={chosen => file && onReplaceVideo ? onReplaceVideo(chosen) : void choose(chosen)} />}
+      {!file && !savedUpload && sourceProvider === 'r2' && <p className="annotation">Videos over 100 MB are compressed on your device before upload.</p>}
       {preview && geometry && <RecordingCorners key={preview} src={preview} geometry={geometry} corners={rawCorners}
         confirmed={cornersConfirmed} disabled={!!busy || removing}
         onChange={next => { setRawCorners(next); setCornersConfirmed(false) }}
@@ -275,10 +304,10 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
             onChange={e => setCompressSelected(e.currentTarget.checked)} />
           Compress video before upload
         </label>}
-        {wantsCompression && !compressed && <p className="annotation">Compression may take about {Math.max(1, Math.ceil(compression.duration / 60))} min, roughly as long as the recording. Keep this screen open. Target: 100 MB or less.{compression.losesAudio && ' This browser will produce a silent video.'}</p>}
+        {wantsCompression && !compressed && <p className="annotation">Compression happens on this device and may take about {Math.max(1, Math.ceil(compression.duration / 60))} min, roughly as long as the video. Keep Pule visible and your screen awake. Switching apps or locking the phone can interrupt it.{compression.losesAudio && ' This browser will produce a silent video.'}</p>}
       </>}
       {wantsCompression && compressed && file && <div>
-        <p role="status">Original: {(file.size / 1e6).toFixed(2)} MB · Compressed: {(compressed.file.size / 1e6).toFixed(2)} MB</p>
+        <p role="status">Original: {recordingSize(file.size)} · Compressed: {recordingSize(compressed.file.size)}</p>
         {recoveryUrl && <p><a className="text-button" href={recoveryUrl} download={compressed.file.name}>Save compressed copy</a> <span className="annotation">Keep a copy if you might need to resume after closing this screen.</span></p>}
       </div>}
       <button type="button" className="button" disabled={!!busy || removing || !file || !cornersConfirmed || !valid || !!initial.error || !!oversizedResume || (shouldCompress && !compression)}
@@ -286,7 +315,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
         {shouldCompress ? 'Compress recording' : 'Save & Create Replay'}
       </button>
     </>}
-    {busy && <div role="status"><p>{compressing ? `Compressing… ${Math.floor(compressionElapsed)} s elapsed` : busy === 'Saving replay' ? 'Uploading… Keep this screen open.' : 'Checking recording…'}</p><progress value={progress} max={100} aria-label={busy} /></div>}
+    {busy && <RecordingProgress {...stages[busy]} percent={progress} />}
     {compressing ? <button type="button" className="text-button" onClick={() => cancel.current?.abort()}>Cancel compression</button>
       : (file || draft || status) && status?.status !== 'cleanup' && status?.status !== 'cleaned' && status?.processing_status !== 'failed' && <button type="button" className="text-button" disabled={removing || !!initial.error} onClick={() => void remove()}>{removing ? 'Cancelling…' : status?.processing_status ? 'Cancel Replay' : 'Cancel Upload'}</button>}
     {confirmCancel && <Modal title={`Cancel replay for Frame ${frame.frame_number}?`} onClose={() => setConfirmCancel(false)}><div className="replay-confirm"><p>Your frame result and statistics stay unchanged.</p><div className="connected-actions"><button type="button" className="button button-secondary" onClick={() => setConfirmCancel(false)}>Keep replay</button><button type="button" className="button removal-confirm" onClick={() => void remove(true)}>Cancel replay</button></div></div></Modal>}

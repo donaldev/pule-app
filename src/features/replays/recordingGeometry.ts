@@ -20,7 +20,21 @@ function child(v: DataView, parent: Box, type: string) {
   return result
 }
 /** Bounded MP4 metadata only; do not load the recording into memory. */
-async function readMovieBox(file: Blob): Promise<ArrayBuffer> {
+const movieBoxes = new WeakMap<Blob, Promise<ArrayBuffer>>()
+
+function readMovieBox(file: Blob) {
+  let metadata = movieBoxes.get(file)
+  if (!metadata) {
+    metadata = readUncachedMovieBox(file).catch(error => {
+      movieBoxes.delete(file)
+      throw error
+    })
+    movieBoxes.set(file, metadata)
+  }
+  return metadata
+}
+
+async function readUncachedMovieBox(file: Blob): Promise<ArrayBuffer> {
   let offset = 0
   for (let count = 0; offset + 8 <= file.size && count < 10000; count++) {
     const header = new DataView(await file.slice(offset, offset + 16).arrayBuffer())
