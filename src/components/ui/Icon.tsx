@@ -2,6 +2,9 @@ export type IconName =
   | 'chevronDown'
   | 'chevronUp'
   | 'upload'
+  | 'download'
+  | 'clock'
+  | 'refresh'
   | 'video'
   | 'arrow'
   | 'back'
@@ -24,6 +27,9 @@ const paths: Record<IconName, string> = {
   chevronDown: 'm6 9 6 6 6-6',
   chevronUp: 'm6 15 6-6 6 6',
   upload: 'M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6',
+  download: 'M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4',
+  clock: 'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+  refresh: 'M20 4v6h-6m6 0a8 8 0 1 0 0 5',
   video: 'M3 6h12v12H3z M15 10l6-4v12l-6-4',
   arrow: 'M5 12h14m-6-6 6 6-6 6',
   back: 'M19 12H5m6-6-6 6 6 6',

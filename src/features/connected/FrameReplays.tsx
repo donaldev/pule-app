@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Icon } from '../../components/ui/Icon'
 import { Modal } from '../../components/ui/Primitives'
-import type { FrameRecordingState, FrameReplay, SavedFrame } from '../../data/remote/database.types'
+import type { FrameRecordingState, FrameReplay, ReplayMatch, SavedFrame } from '../../data/remote/database.types'
 import { RecordingUploadAction } from '../replays/RecordingUpload'
-import { listFrameRecordings, removeFrameReplay } from '../../data/remote/recordingService'
-import { listFrameReplays, signFrameReplay } from '../../data/remote/replayService'
+import { listFrameRecordings } from '../../data/remote/recordingService'
+import { listFrameReplays } from '../../data/remote/replayService'
 
-type Playback = { frame: SavedFrame; url?: string; error?: string }
-export function FrameReplays({ userId, sessionId, children, upload, describeFrame, archiveFrames }: {
+import { ReplayViewer } from '../replays/ReplayViewer'
+
+export function FrameReplays({ userId, sessionId, match, children, upload, describeFrame, archiveFrames }: {
+  match: ReplayMatch
   archiveFrames?: SavedFrame[]
   describeFrame?: (frame: SavedFrame) => string
   upload?: { playerId: string | null; detailEligible: boolean }
@@ -16,14 +18,7 @@ export function FrameReplays({ userId, sessionId, children, upload, describeFram
   const [replays, setReplays] = useState<FrameReplay[]>([])
   const [availability, setAvailability] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [attempt, setAttempt] = useState(0)
-  const [playback, setPlayback] = useState<Playback | null>(null)
-  const [confirmDelete, setConfirmDelete] = useState<SavedFrame | null>(null)
-  const [removing, setRemoving] = useState(false)
-  const [removalMessage, setRemovalMessage] = useState('')
-  const [videoSize, setVideoSize] = useState<{ url: string; width: number; height: number } | null>(null)
-  const video = useRef<HTMLVideoElement>(null)
-  const request = useRef(0)
-  const signing = useRef(false)
+  const [playback, setPlayback] = useState<{ frame: SavedFrame; replay: FrameReplay } | null>(null)
   const [showAllReplays, setShowAllReplays] = useState(false)
   const [adding, setAdding] = useState(false)
   const [selectedFrameId, setSelectedFrameId] = useState('')
@@ -42,32 +37,9 @@ export function FrameReplays({ userId, sessionId, children, upload, describeFram
     const timer = adding ? undefined : window.setInterval(() => { void refresh() }, 15_000)
     return () => { alive = false; window.clearInterval(timer) }
   }, [userId, sessionId, attempt, adding])
-  useEffect(() => () => { request.current++; signing.current = false }, [])
-
-  function close() { request.current++; signing.current = false; video.current?.pause(); video.current?.removeAttribute('src'); video.current?.load(); setPlayback(null); setVideoSize(null) }
-  async function watch(frame: SavedFrame) {
+  function watch(frame: SavedFrame) {
     const replay = replays.find(r => r.frame_id === frame.id && r.group_id === frame.group_id)
-    if (!replay || signing.current) return
-    signing.current = true
-    const id = ++request.current
-    setPlayback({ frame })
-    try {
-      const url = await signFrameReplay(userId, replay)
-      if (id === request.current) setPlayback({ frame, url })
-    } catch {
-      if (id === request.current) setPlayback({ frame, error: 'This replay could not be opened. Check your connection and access, then try again.' })
-    } finally { if (id === request.current) signing.current = false }
-  }
-  async function remove(frame: SavedFrame) {
-    const replay = replays.find(r => r.frame_id === frame.id)
-    if (!replay || removing) return
-    setRemoving(true); setRemovalMessage('')
-    try {
-      await removeFrameReplay(userId, frame.id, { path: replay.storage_path })
-      setConfirmDelete(null); close(); setReplays(rows => rows.filter(r => r.storage_path !== replay.storage_path)); setAttempt(n => n + 1)
-      setRemovalMessage('')
-    } catch (reason) { setRemovalMessage(reason instanceof Error ? reason.message : 'Replay deletion could not be confirmed.') }
-    finally { setRemoving(false) }
+    if (replay) setPlayback({ frame, replay })
   }
   return <>
     {availability === 'loading' && <p role="status" className="annotation">Checking replays…</p>}
@@ -83,7 +55,7 @@ export function FrameReplays({ userId, sessionId, children, upload, describeFram
         {availability === 'ready' && recordings.map(recording => {
           const frame = archiveFrames.find(f => f.id === recording.frame_id)
           if (!frame) return null
-          return <div key={frame.id} className="match-replay-card"><p role="status">Frame {frame.frame_number} · {recording.state === 'cleanup' ? recording.failed ? 'Recording failed. Removing video…' : 'Removing recording…' : recording.state === 'uploading' ? 'Uploading' : 'Processing replay'}</p>
+          return <div key={frame.id} className="match-replay-card"><p role="status">Frame {frame.frame_number} · {recording.state === 'cleanup' ? 'Removing recording…' : recording.state === 'uploading' ? 'Uploading' : 'Processing replay'}</p>
             {recording.owned && recording.state !== 'cleanup' && <RecordingUploadAction userId={userId} frame={frame} onPublished={() => setAttempt(n => n + 1)} />}
           </div>
         })}
@@ -107,22 +79,12 @@ export function FrameReplays({ userId, sessionId, children, upload, describeFram
     {adding && <Modal title="Add frame recording" onClose={() => setAdding(false)}><div className="replay-frame-picker"><label>Choose frame<select value={selectedFrameId} onChange={e => setSelectedFrameId(e.target.value)}><option value="">Select a frame</option>{eligibleFrames.map(frame => <option key={frame.id} value={frame.id}>Frame {frame.frame_number}{describeFrame ? ` · ${describeFrame(frame)}` : ''}</option>)}</select></label>
       {selectedFrame ? <RecordingUploadAction key={selectedFrame.id} userId={userId} frame={selectedFrame} onPublished={() => setAttempt(n => n + 1)} /> : <button type="button" className="button frame-recording-action" disabled><Icon name="upload" />Add recording</button>}
     </div></Modal>}
-    {playback && <Modal title={`Frame ${playback.frame.frame_number} replay`} onClose={close}>
-      <div className="replay-player">
-        {describeFrame && <p className="replay-context">{describeFrame(playback.frame)}</p>}
-        {!playback.url && !playback.error && <p role="status">Opening replay…</p>}
-        {playback.url && <video ref={video} key={playback.url} src={playback.url} controls playsInline preload="metadata" data-portrait={videoSize?.url === playback.url && videoSize.height > videoSize.width ? 'true' : undefined}
-          style={videoSize?.url === playback.url ? { aspectRatio: `${videoSize.width} / ${videoSize.height}`, width: `min(100%, calc((100dvh - 230px) * ${videoSize.width / videoSize.height}))` } : undefined}
-          onLoadedMetadata={e => { const v = e.currentTarget; if (v.videoWidth > 0 && v.videoHeight > 0) setVideoSize({ url: playback.url!, width: v.videoWidth, height: v.videoHeight }) }} aria-label={`Frame ${playback.frame.frame_number} replay`}
-          onError={() => setPlayback({ frame: playback.frame, error: 'Playback failed or this link has expired. Open a fresh replay link to try again.' })} />}
-        {playback.error && <><p role="alert">{playback.error}</p><button type="button" className="button" onClick={() => void watch(playback.frame)}>Open fresh replay link</button></>}
-        {upload?.detailEligible && playback.frame.detail_eligible && playback.frame.participants.some(p => p.player_id === upload.playerId) && <button type="button" className="button button-secondary replay-delete" onClick={() => { setRemovalMessage(''); setConfirmDelete(playback.frame) }}>Delete recording</button>}
-      </div>
-    </Modal>}
-    {confirmDelete && <Modal title={`Delete replay for Frame ${confirmDelete.frame_number}?`} onClose={() => { if (!removing) setConfirmDelete(null) }}>
-      <div className="replay-confirm"><p>This removes the video only. Your frame result and statistics stay unchanged.</p>
-      <div className="connected-actions"><button className="button button-secondary" disabled={removing} onClick={() => setConfirmDelete(null)}>Keep replay</button><button className="button removal-confirm" disabled={removing} onClick={() => void remove(confirmDelete)}>{removing ? 'Deleting…' : 'Delete video'}</button></div>
-      {removalMessage && <p role="alert">{removalMessage}</p>}</div>
-    </Modal>}
+    {playback && <ReplayViewer key={playback.replay.storage_path} userId={userId}
+      replay={{ ...match, ...playback.replay, frame_number: playback.frame.frame_number }}
+      description={describeFrame?.(playback.frame)} onClose={() => setPlayback(null)}
+      onDeleted={upload?.detailEligible && playback.frame.detail_eligible && playback.frame.participants.some(p => p.player_id === upload.playerId) ? () => {
+        setReplays(rows => rows.filter(r => r.storage_path !== playback.replay.storage_path))
+        setAttempt(n => n + 1)
+      } : undefined} />}
   </>
 }

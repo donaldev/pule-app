@@ -3,17 +3,20 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
 const text = await readFile(new URL('../../src/features/connected/FrameReplays.tsx', import.meta.url), 'utf8')
-const source = text.replace(/^import .*$/gm, '').replaceAll("import.meta.env?.VITE_FRAME_RECORDING_UPLOADS", "'true'")
+const viewerText = await readFile(new URL('../../src/features/replays/ReplayViewer.tsx', import.meta.url), 'utf8')
+const source = (text + viewerText).replace(/^import .*$/gm, '').replaceAll("import.meta.env?.VITE_FRAME_RECORDING_UPLOADS", "'true'")
 const prelude = `
 const React={createElement:(type,props,...children)=>({type,props:props??{},children}),Fragment:'fragment'};
 const Icon='Icon',Modal='Modal',MatchDisclosureHeading='Disclosure',RecordingUploadAction='RecordingUploadAction';
 const useState=initial=>{const h=globalThis.archive,i=h.cursor++;if(!(i in h.states))h.states[i]=typeof initial==='function'?initial():initial;return [h.states[i],next=>h.states[i]=typeof next==='function'?next(h.states[i]):next]};
-const useRef=initial=>{const h=globalThis.archive,i=h.cursor++;return h.states[i]??(h.states[i]={current:initial})};const useEffect=()=>{};
-const listFrameRecordings=async()=>[];const listFrameReplays=async()=>[];const signFrameReplay=async(user,replay)=>{globalThis.archive.signed.push([user,replay.frame_id]);if(globalThis.archive.signError)throw Error('offline');return 'https://private.test/signed'};
+const useRef=initial=>{const h=globalThis.archive,i=h.cursor++;return h.states[i]??(h.states[i]={current:initial})};
+const useEffect=(fn,deps)=>{const h=globalThis.archive;if(!h.inViewer)return;if(!h.viewerDeps||deps.some((v,i)=>v!==h.viewerDeps[i])){h.viewerCleanup?.();h.viewerDeps=deps;h.viewerCleanup=fn()}};
+const downloadFrameReplay=async()=>{};
+const listFrameRecordings=async()=>[];const listFrameReplays=async()=>[];const signFrameReplay=async(user,replay)=>{globalThis.archive.signed.push([user,replay.storage_path]);if(globalThis.archive.signError)throw Error('offline');return 'https://private.test/signed'};
 const removeFrameReplay=async(...args)=>{globalThis.archive.removed.push(args);if(globalThis.archive.removeError)throw Error('Removal unconfirmed')};
 `
 const compiled = ts.transpileModule(prelude + source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022, jsx: ts.JsxEmit.React } }).outputText
-const { FrameReplays } = await import('data:text/javascript;base64,' + Buffer.from(compiled).toString('base64'))
+const { FrameReplays, ReplayViewer } = await import('data:text/javascript;base64,' + Buffer.from(compiled).toString('base64'))
 const frame = n => ({ id: `frame-${n}`, group_id: 'group', frame_number: n, status: 'completed', detail_eligible: true, participants: [{ player_id: 'player' }], elapsed_ms: 74000 })
 const replay = n => ({ frame_id: `frame-${n}`, group_id: 'group', session_id: 'session', storage_path: `session/frame-${n}.mp4` })
 const nodes = tree => Array.isArray(tree) ? tree.flatMap(nodes) : tree && typeof tree === 'object' ? [tree, ...tree.children.flatMap(nodes)] : []
@@ -21,9 +24,23 @@ const find = (tree, predicate) => nodes(tree).find(predicate)
 const button = (tree, label) => find(tree, n => n.type === 'button' && nodes(n).some(child => child.children.includes(label)))
 const tick = () => new Promise(resolve => setImmediate(resolve))
 function setup(rows, count=1, authorized=true, includeArchive=false) {
- globalThis.archive={states:[rows,'ready',0,null,null,false,'',null],cursor:0,signed:[],removed:[]}
+ globalThis.archive={states:[rows,'ready',0,null,false,false,'',[]],cursor:0,signed:[],removed:[]}
  const frames=Array.from({length:count},(_,i)=>frame(i+1))
- return () => { archive.cursor=0;return FrameReplays({userId:'account',sessionId:'session',archiveFrames:includeArchive?frames:undefined,upload:{playerId:authorized?'player':'viewer',detailEligible:true},describeFrame:()=> 'Donal won · 1:14',children:(action,total)=>({type:'history',props:{total},children:frames.map(f=>({type:'frame',props:{id:f.id},children:[action(f),action(f,'details')]}))})}) }
+ return () => {
+  archive.cursor=0
+  const tree=FrameReplays({userId:'account',sessionId:'session',match:{venue_name:'Soho',occurred_on:'2026-10-25'},archiveFrames:includeArchive?frames:undefined,upload:{playerId:authorized?'player':'viewer',detailEligible:true},describeFrame:()=> 'Donal won · 1:14',children:(action,total)=>({type:'history',props:{total},children:frames.map(f=>({type:'frame',props:{id:f.id},children:[action(f),action(f,'details')]}))})})
+  const viewer=nodes(tree).find(n=>n.type===ReplayViewer)
+  if(!viewer){
+   archive.viewerCleanup?.()
+   archive.viewerCleanup=archive.viewerDeps=undefined
+   archive.states.length=8
+   return tree
+  }
+  archive.inViewer=true
+  const rendered=ReplayViewer(viewer.props)
+  archive.inViewer=false
+  return [tree,rendered]
+ }
 }
 test('empty, one and 40-frame archives count only loaded published replays; add stays in details',()=>{
  for(const count of [0,1,40]) {
@@ -38,23 +55,23 @@ test('empty, one and 40-frame archives count only loaded published replays; add 
 })
 test('replay opens exact source, respects metadata aspect ratio, confirmation and deletion authorization',async()=>{
  const render=setup([replay(1)]);let tree=render()
- button(tree,'Watch replay').props.onClick();await tick();tree=render()
- assert.deepEqual(archive.signed,[['account','frame-1']])
+ button(tree,'Watch replay').props.onClick();render();await tick();tree=render()
+ assert.deepEqual(archive.signed,[['account','session/frame-1.mp4']])
  let video=find(tree,n=>n.type==='video');assert.equal(video.props.controls,true);assert.equal(video.props.playsInline,true)
  for(const [width,height] of [[576,1024],[1920,1080]]) {
   video.props.onLoadedMetadata({currentTarget:{videoWidth:width,videoHeight:height}});tree=render();video=find(tree,n=>n.type==='video');assert.equal(video.props.style.aspectRatio,`${width} / ${height}`)
  }
- button(tree,'Delete recording').props.onClick();tree=render();assert.equal(archive.removed.length,0)
+ button(tree,'Delete Replay').props.onClick();tree=render();assert.equal(archive.removed.length,0)
  button(tree,'Keep replay').props.onClick();tree=render();assert.equal(find(tree,n=>n.type==='Modal'&&n.props.title.startsWith('Delete replay')),undefined)
- button(tree,'Delete recording').props.onClick();tree=render();await button(tree,'Delete video').props.onClick();tree=render()
+ button(tree,'Delete Replay').props.onClick();tree=render();await button(tree,'Delete video').props.onClick();tree=render()
  assert.deepEqual(archive.removed,[['account','frame-1',{path:'session/frame-1.mp4'}]])
  assert.equal(find(tree,n=>n.type==='history').props.total,0);assert.ok(find(tree,n=>n.type==='RecordingUploadAction'))
- const readOnly=setup([replay(1)],1,false);button(readOnly(),'Watch replay').props.onClick();await tick();assert.equal(button(readOnly(),'Delete recording'),undefined)
+ const readOnly=setup([replay(1)],1,false);button(readOnly(),'Watch replay').props.onClick();await tick();assert.equal(button(readOnly(),'Delete Replay'),undefined)
 })
 test('signing, expired playback and deletion errors remain visible without discarding the replay',async()=>{
- const render=setup([replay(1)]);archive.signError=true;button(render(),'Watch replay').props.onClick();await tick();let tree=render();assert.ok(button(tree,'Open fresh replay link'))
- archive.signError=false;button(tree,'Open fresh replay link').props.onClick();await tick();tree=render();find(tree,n=>n.type==='video').props.onError();tree=render();assert.match(JSON.stringify(tree),/expired/)
- button(tree,'Open fresh replay link').props.onClick();await tick();tree=render();archive.removeError=true;button(tree,'Delete recording').props.onClick();tree=render();await button(tree,'Delete video').props.onClick();tree=render();assert.match(JSON.stringify(tree),/Removal unconfirmed/);assert.equal(find(tree,n=>n.type==='history').props.total,1)
+ const render=setup([replay(1)]);archive.signError=true;button(render(),'Watch replay').props.onClick();render();await tick();let tree=render();assert.ok(button(tree,'Open fresh replay link'))
+ archive.signError=false;button(tree,'Open fresh replay link').props.onClick();render();await tick();tree=render();find(tree,n=>n.type==='video').props.onError();tree=render();assert.match(JSON.stringify(tree),/expired/)
+ button(tree,'Open fresh replay link').props.onClick();render();await tick();tree=render();archive.removeError=true;button(tree,'Delete Replay').props.onClick();tree=render();await button(tree,'Delete video').props.onClick();tree=render();assert.match(JSON.stringify(tree),/Removal unconfirmed/);assert.equal(find(tree,n=>n.type==='history').props.total,1)
  find(tree,n=>n.type==='Modal'&&n.props.title==='Frame 1 replay').props.onClose();assert.equal(find(render(),n=>n.type==='video'),undefined)
 })
 
@@ -102,7 +119,7 @@ test('frame disclosure is a native full-row button, independent of Replay; obser
 
 test('dedicated archive shares published frames and excludes them from the Add frame selector',()=>{
  for(const rows of [[],[replay(1)],[replay(1),replay(2)],Array.from({length:5},(_,i)=>replay(i+1))]) {
-  globalThis.archive={states:[rows,'ready',0,null,null,false,'',null],cursor:0,signed:[],removed:[]}
+  globalThis.archive={states:[rows,'ready',0,null,false,false,'',[]],cursor:0,signed:[],removed:[]}
   const frames=Array.from({length:6},(_,i)=>frame(i+1))
   const render=()=>{archive.cursor=0;return FrameReplays({userId:'account',sessionId:'session',archiveFrames:frames,upload:{playerId:'player',detailEligible:true},describeFrame:f=>`Donal won · ${f.frame_number}`,children:()=>null})}
   let tree=render();const heading=find(tree,n=>n.type==='h2');assert.ok(heading.children.join('').includes(` · ${rows.length}`))
@@ -127,20 +144,19 @@ test('frame outcomes use only linked participant UUIDs; tied match scores never 
 
 test('active recordings from either participant block picker entries and show current lifecycle',()=>{
  const render=setup([],4,true,true)
- // Existing hook slots stay stable; lifecycle summary follows the frame selector state.
- render();archive.states[14]=[
+ render();archive.states[7]=[
   {frame_id:'frame-1',state:'uploading',owned:false,failed:false},
   {frame_id:'frame-2',state:'processing',owned:false,failed:false},
-  {frame_id:'frame-3',state:'cleanup',owned:true,failed:true},
+  {frame_id:'frame-3',state:'cleanup',owned:true,failed:false},
  ]
  let tree=render()
  assert.equal(nodes(tree).filter(n=>n.type==='RecordingUploadAction').length,1)
  assert.match(JSON.stringify(tree),/Uploading/)
  assert.match(JSON.stringify(tree),/Processing replay/)
- assert.match(JSON.stringify(tree),/Recording failed. Removing video/)
+ assert.match(JSON.stringify(tree),/Removing recording/)
  button(tree,'Add frame recording').props.onClick();tree=render()
  assert.deepEqual(nodes(tree).filter(n=>n.type==='option'&&n.props.value).map(n=>n.props.value),['frame-4'])
- archive.states[12]=false
- archive.states[14]=[];tree=render()
+ archive.states[5]=false
+ archive.states[7]=[];tree=render()
  assert.equal(nodes(tree).filter(n=>n.type==='RecordingUploadAction').length,4)
 })

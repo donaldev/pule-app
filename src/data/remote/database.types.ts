@@ -25,6 +25,18 @@ export interface ReplayUploadStatus {
 }
 export interface FrameRecordingState { frame_id: UUID; state: 'uploading' | 'processing' | 'cleanup'; owned: boolean; failed: boolean }
 export interface FrameReplay { frame_id: UUID; group_id: UUID; session_id: UUID; storage_path: string; created_at: string }
+export interface ReplayMatch {
+  venue_name: string
+  occurred_on: string | null
+}
+export type MyReplay = ReplayMatch & {
+  session_id: UUID
+  frame_id: UUID
+  frame_number: number
+} & (
+  { status: 'ready'; storage_path: string; can_delete: boolean }
+  | { status: 'queued' | 'processing'; storage_path: null; can_delete: false }
+)
 export interface FrameParticipant { player_id: UUID; side: 1 | 2; foul_count: number | null }
 export interface SavedFrame {
   id: UUID; group_id: UUID; session_id: UUID; frame_number: number
@@ -62,6 +74,7 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      get_my_replays: { Args: Record<never, never>; Returns: MyReplay[] }
       get_session_frame_recordings: { Args: {p_session:UUID};Returns:FrameRecordingState[] }
       get_my_frame_recording: { Args: {p_frame:UUID};Returns:ReplayUploadStatus | null }
       remove_frame_replay: { Args: {p_frame:UUID;p_upload?:UUID;p_operation?:UUID;p_path?:string};Returns:undefined }

@@ -1,5 +1,5 @@
 import { actorAuthorization, getSupabase } from './supabase'
-import type { FrameReplay } from './database.types'
+import type { FrameReplay, MyReplay, ReplayMatch } from './database.types'
 
 export async function listFrameReplays(userId: string, sessionId: string): Promise<FrameReplay[]> {
   const authorization = await actorAuthorization(userId)
@@ -16,12 +16,35 @@ export async function listFrameReplays(userId: string, sessionId: string): Promi
   })
 }
 
-export async function signFrameReplay(userId: string, replay: FrameReplay): Promise<string> {
+export async function listMyReplays(userId: string): Promise<MyReplay[]> {
+  const authorization = await actorAuthorization(userId)
+  const { data, error } = await getSupabase().rpc('get_my_replays')
+    .setHeader('Authorization', authorization).retry(false).abortSignal(AbortSignal.timeout(20_000))
+  if (error || !data) throw new Error('Your replays could not be loaded.')
   await actorAuthorization(userId)
-  const { data, error } = await getSupabase().storage.from('frame-replays').createSignedUrl(replay.storage_path, 60)
+  return data
+}
+
+export async function signFrameReplay(userId: string, replay: Pick<FrameReplay, 'storage_path'>, filename?: string): Promise<string> {
+  await actorAuthorization(userId)
+  const { data, error } = await getSupabase().storage.from('frame-replays').createSignedUrl(replay.storage_path, 60, filename ? { download: filename } : undefined)
   if (error || !data?.signedUrl) throw new Error('This replay could not be opened. Please try again.')
   await actorAuthorization(userId)
   return data.signedUrl
+}
+
+export async function downloadFrameReplay(userId: string, replay: ReplayMatch & { storage_path: string; frame_number: number }) {
+  const venue = replay.venue_name.normalize('NFKD').replace(/\p{M}/gu, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'Match'
+  const date = replay.occurred_on && /^\d{4}-\d{2}-\d{2}$/.test(replay.occurred_on) ? `_${replay.occurred_on}` : ''
+  const filename = `Pule_${venue}${date}_Frame${replay.frame_number}.mp4`
+  const href = await signFrameReplay(userId, replay, filename)
+  const link = document.createElement('a')
+  link.href = href
+  link.download = filename
+  document.body.append(link)
+  link.click()
+  link.remove()
 }
 
 /** One visible-match batch (paged only for API row limits), under existing replay RLS. */

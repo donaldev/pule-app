@@ -5,9 +5,10 @@ export function matchSessionId(route:string) {return /^\/session\/([a-f0-9-]{36}
 export function nextMatchLocation(previous:MatchLocation,route:string):MatchLocation {
  return {route,origin:matchSessionId(route)&&!matchSessionId(previous.route)?previous.route:previous.origin}
 }
-export function historyReturnPath(origin:string) {return historyRoutes.has(origin)?origin:'/matches'}
+export function historyReturnPath(origin:string) {return historyRoutes.has(origin)||origin==='/account/replays'?origin:'/matches'}
 export function activeNavigation(route:string,status?:string,origin='/matches') {
  if(matchSessionId(route))return status==='active'?'/play':status==='finalized'||historyRoutes.has(origin)?'/matches':'/play'
+ if(route==='/account/replays')return '/account'
  if(route==='/standings'||route.startsWith('/stats'))return '/stats'
  if(route.startsWith('/matches'))return '/matches'
  if(['/setup','/new-group','/group-settings'].includes(route))return '/play'

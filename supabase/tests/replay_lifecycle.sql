@@ -46,6 +46,7 @@ select test.ok(app.get_session_frame_recordings(session_id)='[]'::jsonb,'nonpart
 reset role;
 set role anon;
 select test.denied('select app.get_session_frame_recordings(gen_random_uuid())','42501','anonymous lifecycle read denied');
+select test.denied('select app.get_my_replays()','42501','anonymous library access denied');
 reset role;
 set role service_role;
 select app.bind_r2_frame_recording((answer->>'upload_id')::uuid,'20000000-0000-0000-0000-000000000001','synthetic') from test.upload_reservations where n=1;
@@ -55,12 +56,16 @@ set role authenticated;
 set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';
 select test.ok((app.get_session_frame_recordings(session_id)->0->>'state')='processing','committed source appears as Processing replay before queue') from test.upload_cases where n=1;
 select app.queue_frame_replay_processing((answer->>'upload_id')::uuid,'[[20,20],[620,20],[620,460],[20,460]]',640,480) from test.upload_reservations where n=1;
+set request.jwt.claim.sub='20000000-0000-0000-0000-000000000002';
+select test.ok((app.get_my_replays()->0->>'status')='queued' and app.get_my_replays()->0->>'storage_path' is null,'teammate sees queued state without source path');
+set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';
 select test.denied(format('select app.reserve_r2_frame_recording(gen_random_uuid(),%L,100,repeat(''b'',64))',frame_id),'55000','queued recording blocks duplicates') from test.upload_cases where n=1;
 reset role;
 set role service_role;
 insert into test.cancel_lease select app.claim_r2_frame_replay_processing();
 reset role;
 set role authenticated;
+select test.ok((app.get_my_replays()->0->>'status')='processing','leased replay shows as processing');
 select test.denied(format('select app.reserve_r2_frame_recording(gen_random_uuid(),%L,100,repeat(''b'',64))',frame_id),'55000','processing recording blocks duplicates') from test.upload_cases where n=1;
 reset role;
 -- Old reservations must not allow another frame's reservation to shorten writer barriers.
@@ -73,13 +78,13 @@ reset role;
 select test.ok((select status='cleanup' from private.frame_replay_uploads where id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=1)),'terminal failure retires source immediately');
 select test.ok((select count(*)=2 and min(due_at)>clock_timestamp()+interval '39 minutes' from private.frame_replay_cleanup),'source and output cleanup wait for in-flight writer');
 set role authenticated;
-select test.ok((app.get_session_frame_recordings(session_id)->0->>'state')='cleanup' and (app.get_session_frame_recordings(session_id)->0->>'failed')='true','failed attempt remains occupied and visibly cleaning') from test.upload_cases where n=1;
+select test.ok(app.get_session_frame_recordings(session_id)='[]'::jsonb and app.get_my_replays()='[]'::jsonb,'terminal attempt is hidden from current Frame History and library') from test.upload_cases where n=1;
 insert into test.upload_reservations select 4,app.reserve_r2_frame_recording(gen_random_uuid(),frame_id,100,repeat('d',64)) from test.upload_cases where n=4;
 reset role;
 select test.ok((select min(due_at)>clock_timestamp()+interval '39 minutes' from private.frame_replay_cleanup),'unrelated reservation preserves cleanup writer barriers');
 set role authenticated;
 select test.denied(format('select app.queue_frame_replay_processing(%L,%L,640,480)',answer->>'upload_id','[[20,20],[620,20],[620,460],[20,460]]'),'55000','terminal failure has no manual retry') from test.upload_reservations where n=1;
-select test.denied(format('select app.reserve_r2_frame_recording(gen_random_uuid(),%L,100,repeat(''b'',64))',frame_id),'55000','cleanup blocks new attempt') from test.upload_cases where n=1;
+insert into test.upload_reservations select 2,app.reserve_r2_frame_recording(gen_random_uuid(),frame_id,100,repeat('b',64)) from test.upload_cases where n=1;
 reset role;
 set role service_role;
 select test.denied(format('select app.complete_frame_replay_processing(%L,%L,70,5,1)',answer->>'job_id',answer->>'lease_id'),'55000','failed worker cannot publish late') from test.cancel_lease;
@@ -100,8 +105,7 @@ reset role;
 select test.ok((select status='cleaned' from private.frame_replay_uploads where id=(select (answer->>'upload_id')::uuid from test.upload_reservations where n=1)),'all object deletions acknowledged before release');
 select test.ok(not exists(select 1 from private.frame_replay_jobs),'failed processing payload removed after safe cleanup');
 set role authenticated;
-select test.ok(not exists(select 1 from jsonb_array_elements(app.get_session_frame_recordings(session_id)) x where x->>'frame_id'=frame_id::text),'cleaned failure vanishes from current state') from test.upload_cases where n=1;
-insert into test.upload_reservations select 2,app.reserve_r2_frame_recording(gen_random_uuid(),frame_id,100,repeat('b',64)) from test.upload_cases where n=1;
+select test.ok(exists(select 1 from jsonb_array_elements(app.get_session_frame_recordings(session_id)) x where x->>'frame_id'=frame_id::text and x->>'state'='uploading'),'retired attempt cleanup preserves active replacement') from test.upload_cases where n=1;
 reset role;
 select test.ok((select answer->>'storage_path' from test.upload_reservations where n=1)<>(select answer->>'storage_path' from test.upload_reservations where n=2),'fresh attempt has independent immutable source');
 set role service_role;
@@ -123,6 +127,17 @@ reset role;
 set role authenticated;
 select test.ok(not exists(select 1 from jsonb_array_elements(app.get_session_frame_recordings(session_id)) x where x->>'frame_id'=frame_id::text),'published video no longer listed as processing') from test.upload_cases where n=1;
 select test.denied(format('select app.reserve_r2_frame_recording(gen_random_uuid(),%L,100,repeat(''c'',64))',frame_id),'55000','published recording blocks new upload') from test.upload_cases where n=1;
+select test.ok((app.get_my_replays()->0->>'status')='ready','uploader sees the ready replay');
+set request.jwt.claim.sub='20000000-0000-0000-0000-000000000002';
+select test.ok((app.get_my_replays()->0->>'frame_number')='1' and jsonb_array_length(app.get_my_replays())=1
+  and exists(select 1 from storage.objects where bucket_id='frame-replays' and name=app.get_my_replays()->0->>'storage_path'),
+  'linked teammate can sign the same finished object');
+set request.jwt.claim.sub='20000000-0000-0000-0000-000000000003';
+select test.ok(app.get_my_replays()='[]'::jsonb,'unlinked group viewer has no personal replay rows');
+set request.jwt.claim.sub='20000000-0000-0000-0000-000000000005';
+select test.ok(app.get_my_replays()='[]'::jsonb and not exists(select 1 from storage.objects where bucket_id='frame-replays'),
+  'outside account cannot list or sign the object');
+set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';
 -- Terminal integrity failure before finalisation reuses cleanup without a processing job.
 insert into test.upload_reservations select 3,app.reserve_r2_frame_recording(gen_random_uuid(),frame_id,100,repeat('c',64)) from test.upload_cases where n=2;
 select test.denied(format('select app.fail_frame_recording_upload(%L,%L)',answer->>'upload_id','20000000-0000-0000-0000-000000000001'),'42501','browser cannot classify trusted upload failure') from test.upload_reservations where n=3;

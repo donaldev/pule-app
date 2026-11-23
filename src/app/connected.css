@@ -1095,3 +1095,50 @@
 
 /* Upload is secondary to watching published footage. */
 .connected-app .match-replays .add-frame-recording { min-height:52px; background:transparent; border:1px solid var(--brass); color:var(--brass); }
+
+.account-replays-link {
+  display:flex; align-items:center; gap:12px; min-height:52px; padding:10px 14px;
+  color:var(--brass); background:var(--walnut); border:1px solid #89734F;
+  border-radius:var(--radius-card); text-decoration:none; font-weight:700;
+}
+.account-replays-link span { flex:1; color:var(--text); }
+.my-replays { display:grid; gap:16px; }
+.my-replays .back-link { justify-self:start; color:var(--brass); }
+.my-replays :focus-visible { outline-color:var(--brass); }
+.my-replays-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.my-replays-header h1 { margin:0; }
+.my-replays-header p, .my-replays-empty p { margin:6px 0 0; color:var(--muted); }
+.my-replays-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:0; }
+.my-replays-summary > div, .my-replays-empty, .my-replays-match {
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-card);
+}
+.my-replays-summary > div { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px; padding:10px 12px; }
+.my-replays-summary dt { color:var(--muted); }
+.my-replays-summary dd { order:-1; margin:0; color:var(--brass); font-size:1.35rem; font-weight:700; }
+.my-replays-empty { padding:16px; }
+.my-replays-empty h2, .my-replays-match h2 { margin:0; font-size:1rem; }
+.my-replays-match h2 a {
+  display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 14px;
+  border-radius:var(--radius-card) var(--radius-card) 0 0;
+  background:var(--walnut); color:var(--text); text-decoration:none;
+}
+.my-replays-match h2 small { display:block; margin-top:3px; color:var(--muted); font-weight:400; }
+.my-replays-match h2 svg { color:var(--brass); }
+.my-replays-match ul { margin:0; padding:0; list-style:none; }
+.my-replays-match li {
+  display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; padding:5px 10px 5px 14px;
+  border-top:1px solid var(--line);
+}
+.my-replays-frame { display:flex; align-items:center; min-height:44px; margin-right:auto; color:var(--text); }
+.my-replays-status { display:inline-flex; gap:5px; align-items:center; color:var(--muted); font-size:.8rem; }
+.my-replays-actions { display:flex; gap:4px; align-items:start; }
+.replay-icon-action {
+  display:inline-grid; place-items:center; flex-shrink:0; min-width:44px; min-height:44px;
+  padding:0; border:1px solid transparent; border-radius:8px; background:transparent; color:var(--brass);
+}
+.replay-icon-action:hover:not(:disabled) { border-color:var(--brass); background:var(--walnut); }
+.replay-icon-action:disabled { opacity:.5; }
+.replay-player-actions { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:10px 16px; margin-top:12px; }
+.modal .replay-player-actions .replay-delete { margin:0 0 0 auto; }
+.replay-player-actions .replay-download-action { min-height:44px; color:var(--brass); }
+.replay-download .replay-download-error { max-width:19ch; margin:4px 0; font-size:.8rem; }

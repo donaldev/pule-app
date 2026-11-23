@@ -24,7 +24,7 @@ export function PlayerInitialization({game,route,claimPrompt,children}:{game:Con
  },[linked,claimRoute,paused,retry])
  const again=()=>{job.current=null;setOutcome(null);setRetry(n=>n+1)}
  // Claims and Account/recovery must remain reachable even when initialization is blocked.
- if(linked||claimRoute||route==='/account'||outcome?.status==='linked'||outcome?.status==='complete')return children
+ if(linked||claimRoute||route==='/account'||route==='/account/replays'||outcome?.status==='linked'||outcome?.status==='complete')return children
  if(game.intent||game.recoveryProblem)return <section className="narrow-page"><p>A saved action needs checking before you continue.</p><a className="button button-secondary" href="#/account">Open Account</a></section>
  if(outcome?.status==='claim_required')return <section className="narrow-page"><h1>Connect your existing games</h1><p>Open your player invitation, or ask the person who invited you for a fresh link. Your games will stay with the same player.</p>{claimPrompt}<a className="text-button" href="#/account">Account</a></section>
  if(outcome?.status==='confirmation_required')return <section className="narrow-page"><h1>Confirm your email</h1><p>Confirm your email, then return here to continue.</p><button className="button" onClick={again}>Check again</button><a className="text-button" href="#/account">Account</a></section>
