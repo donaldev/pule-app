@@ -23,7 +23,7 @@ const React={Fragment:'fragment',createElement:(type,props,...children)=>{
 }};
 const useState=initial=>{const h=globalThis.cornerTest,i=h.cursor++;if(!(i in h.hooks))h.hooks[i]=initial;return [h.hooks[i],next=>h.hooks[i]=next]};
 const useRef=initial=>{const h=globalThis.cornerTest,i=h.cursor++;return h.hooks[i]??(h.hooks[i]={current:initial})};
-const useEffect=()=>{};
+const useEffect=()=>{}; const useId=()=> 'keyboard-help';
 `)
 const nodes = tree => Array.isArray(tree) ? tree.flatMap(nodes) : tree && typeof tree === 'object' ? [tree, ...tree.children.flatMap(nodes)] : []
 const find = (tree, match) => nodes(tree).find(match)
@@ -117,8 +117,8 @@ test('pinching and dragging the viewport never add corners; a dragged marker cha
   for (const [x,y] of [[100,100],[260,100],[260,360],[100,360]]) click(x,y)
   const before = h.props.corners
   assert.deepEqual(before[0], geometry.displayToSource(viewport.stageToImage([100,100], viewport.initialViewport, bounds, {width:720,height:1280}), h.props.geometry))
-  button(h.render(), 'Confirm corners').props.onClick()
-  assert.equal(button(h.render(), 'Corners confirmed').props.disabled, true)
+  button(h.render(), 'Confirm table').props.onClick()
+  assert.equal(button(h.render(), 'Confirm table').props.disabled, true)
   h.pointer('onPointerDown', 1, 100, 100, 0)
   h.pointer('onPointerMove', 1, 110, 120)
   h.pointer('onPointerUp', 1, 110, 120)

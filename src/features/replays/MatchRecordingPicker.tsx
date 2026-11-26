@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Icon } from '../../components/ui/Icon'
 import { Modal } from '../../components/ui/Primitives'
 import type { SavedFrame } from '../../data/remote/database.types'
-import { RecordingFilePicker, RecordingProgress } from './RecordingFilePicker'
+import { RecordingFilePicker } from './RecordingFilePicker'
 import { RecordingUpload } from './RecordingUpload'
 import { inspectRecordingTiming, type RecordingTiming } from './recordingGeometry'
 import { suggestReplayFrame } from './suggestReplayFrame'
@@ -45,20 +45,14 @@ export function MatchRecordingPicker({ userId, frames, eligibleFrames, describeF
     setConfirmed(null)
   }
 
-  return <Modal title={confirmed ? `Create replay · Frame ${confirmed.frame.frame_number}` : 'Add a recording'} onClose={onClose}>
+  return <Modal title={confirmed ? `Create replay · Frame ${confirmed.frame.frame_number}` : 'Add frame recording'} onClose={onClose}>
     {confirmed ? <RecordingUpload userId={userId} frame={confirmed.frame} initialFile={confirmed.file} initialTiming={timing ?? (checking ? undefined : null)}
-      onPublished={onPublished} onRemoved={onClose} onReplaceVideo={chooseVideo} /> : <div className="replay-frame-picker">
-      {!file && <p>Choose a video of your pool frame. Pule will help you match it and mark the table.</p>}
+      onPublished={onPublished} onDone={onClose} onRemoved={onClose} onReplaceVideo={chooseVideo} /> : <div className="replay-frame-picker">
       <RecordingFilePicker file={file} onChoose={chooseVideo} />
-      {!file && import.meta.env?.VITE_RECORDING_UPLOAD_API_URL && <p className="annotation">Videos over 100 MB are compressed on your device before upload.</p>}
       {file && <>
-        <div aria-live="polite">
-          {checking ? <RecordingProgress title="Reading video details" detail="Matching the recording time to your frames." /> : suggested ? <div className="replay-frame-suggestion">
-            <strong>Suggested frame</strong>
-            <p>Frame {suggested.frame_number}</p>
-            <p className="annotation">Recording time matches this frame.</p>
-          </div> : <p className="annotation">We couldn't confidently match this recording to a frame. Please choose one below.</p>}
-        </div>
+        <p className="annotation replay-frame-status" role="status">
+          {checking ? 'Matching your video…' : suggested ? `Suggested frame ${suggested.frame_number}` : 'Choose the frame shown in your video.'}
+        </p>
         <label>Choose frame
           <select value={selected?.id ?? ''} onChange={event => setChosenId(event.currentTarget.value)}>
             <option value="">Select a frame</option>

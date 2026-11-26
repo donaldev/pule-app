@@ -88,6 +88,12 @@
  --line: #536357; --green: #103C2C; --brass: #C5A46A;
  background: var(--canvas); color: var(--text); color-scheme: dark;
 }
+.connected-app.app-shell {
+  --overview-width: 960px;
+  max-width: none;
+  min-height: 100dvh;
+}
+.connected-app .sidebar { inset-inline-start: 0; overflow-y: auto; }
 .connected-app, .connected-auth-shell { color: #09251C; background: #F7F4EA; }
 .connected-app .sidebar, .connected-app .topbar { background: #F7F4EA; }
 .connected-app .sidebar { border-right: 1px solid #cdd4c8; }
@@ -264,7 +270,14 @@
 .connected-app .resume-nights { margin-bottom: 18px; }
 
 /* Sports results: night victories lead; frame numbers support. */
-.personal-home, .results-page { max-width: 960px; margin: auto; }
+.connected-app :is(.personal-home, .results-page, .completed-match-page) {
+  max-width: var(--overview-width);
+  margin-inline: auto;
+}
+.connected-app .completed-match-page { padding-inline: 0; }
+@media (361px <= width <= 640px) {
+  .connected-app .main-live:has(.completed-match-page) { padding-inline: 20px; }
+}
 .connected-app .personal-home .page-heading, .connected-app .results-page .page-heading { margin: 0 0 18px; }
 .connected-app .personal-home .page-heading h1, .connected-app .results-page .page-heading h1 { font: 750 30px/1.1 var(--font-sans); letter-spacing: -.04em; }
 .personal-home .page-heading .eyebrow, .results-page .page-heading .eyebrow { font-size: 11px; margin-bottom: 6px; }
@@ -929,9 +942,6 @@
 .watch-replay { min-height:44px; }
 
 /* Full-frame uploads use the same dark replay dialog and touch-sized controls. */
-.modal:has(.recording-upload) { background:var(--surface); color:var(--text); border-color:var(--brass); width:min(720px,calc(100vw - 20px)); max-height:calc(100dvh - 20px); overflow-y:auto; overscroll-behavior:contain; }
-.modal:has(.recording-upload) h2, .modal:has(.recording-upload) .icon-button, .recording-upload .text-button { color:var(--text); }
-.recording-upload { display:grid; gap:14px; }
 .recording-upload p { margin:0; }
 .recording-upload video { width:100%; max-height:40dvh; background:#0B0E0C; }
 .recording-upload .button { width:100%; }
@@ -1057,31 +1067,33 @@
 .frame-summary-toggle .frame-disclosure-mark { grid-column:4; }
 .frame-history-header > .frame-replay-action { position:absolute; right:52px; top:50%; transform:translateY(-50%); }
 .connected-app .frame-replay-action .frame-replay-indicator { display:flex; align-items:center; justify-content:center; gap:4px; min-width:72px; min-height:44px; margin:0; padding:4px; color:var(--brass); font-size:12px; }
-.match-replay-list { display:grid; gap:12px; }
-.match-replay-card { display:grid; gap:12px; padding:14px; background:var(--felt); border-radius:var(--radius-card); }
-.match-replay-card-heading { display:flex; align-items:center; gap:12px; }
-.match-replay-card h3 { margin:0 0 4px; font-size:15px; color:var(--text); }
-.match-replay-card p { margin:0 0 4px; color:var(--text); font-size:13px; }
-.match-replay-card small { color:var(--muted); }
-.replay-placeholder { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; color:var(--brass); }
-.connected-app :is(.match-replays,.replay-frame-picker) .frame-recording-action { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:56px; padding:12px; border:1px solid var(--brass); border-radius:var(--radius-control); background:var(--brass); color:#10271D; font-weight:650; }
-.match-replays .add-frame-recording { margin-top:16px; }
-.replay-frame-picker { display:grid; gap:16px; padding-top:16px; }
-.replay-frame-picker label { display:grid; gap:8px; }
-.replay-frame-picker select { width:100%; min-height:48px; max-width:100%; background:var(--felt); color:var(--text); }
+.match-replays-heading { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; margin-bottom:12px; }
+.match-replays-heading h2 { margin:0; color:var(--text); font-size:clamp(1.125rem, 2vw, 1.375rem); }
+.match-replays-heading p { margin:0; color:#ead9c5; font-size:.875rem; font-variant-numeric:tabular-nums; }
+.match-replays-content { min-width:0; }
+.match-replay-list { list-style:none; margin:0; padding:0; border:1px solid #536253; border-radius:var(--radius-control); background:#14392b; color:var(--text); }
+.match-replay-row { display:grid; grid-template-columns:auto minmax(0,1fr); grid-auto-flow:column; align-items:center; gap:clamp(8px, 2vw, 16px); min-height:64px; padding:5px clamp(8px, 2vw, 14px); }
+.match-replay-row + .match-replay-row { border-top:1px solid #416052; }
+.match-replay-number { display:grid; place-items:center; min-width:36px; min-height:36px; padding-inline:4px; border-radius:8px; background:#203126; color:#e9cf9a; font-size:1rem; font-weight:750; font-variant-numeric:tabular-nums; }
+.match-replay-info h3 { margin:0; font-size:1rem; font-weight:750; line-height:1.2; }
+.match-replay-info p { margin:3px 0 0; color:#e1e7d9; font-size:.875rem; line-height:1.2; overflow-wrap:anywhere; }
+.match-replay-info .match-replay-status { display:flex; align-items:center; gap:5px; color:#c0cec2; }
+.match-replay-status svg { flex:none; }
+.connected-app .match-replays .match-replay-watch { display:inline-flex; justify-content:center; min-width:62px; min-height:44px; padding:4px 10px; background:var(--brass); color:#10271d; border:1px solid var(--brass); font-size:.875rem; }
+.connected-app .match-replays .replay-pending { min-width:44px; min-height:44px; padding:4px; color:#ead5a9; }
+.connected-app .match-replays .view-all-replays { display:flex; align-items:center; gap:6px; min-height:44px; margin-top:8px; padding:4px 12px; color:#f4dfb7; border-color:#967b5d; font-size:.875rem; }
+.match-replays .add-frame-recording { margin-top:10px; justify-content:center; width:100%; }
+.match-replays-content > .annotation { color:#ead9c5; }
+.replay-frame-picker { display:grid; gap:10px; }
+.replay-frame-picker label { display:grid; gap:6px; }
+.replay-frame-picker select { width:100%; min-height:44px; max-width:100%; background:var(--felt); color:var(--text); }
 .replay-frame-picker p { margin:0; }
-.replay-recording-name { overflow-wrap:anywhere; }
-.replay-recording-name p, .replay-frame-suggestion p { margin-top:4px; }
-.replay-frame-suggestion { padding:10px 12px; border:1px solid var(--line); border-radius:var(--radius-control); background:var(--felt); }
-.replay-frame-suggestion strong { color:var(--brass); }
-.modal:has(.replay-frame-picker) { background:var(--surface); color:var(--text); border-color:var(--brass); }
-.modal:has(.replay-frame-picker) h2,.modal:has(.replay-frame-picker) .icon-button { color:var(--text); }
+.replay-frame-status { min-height:2.5em; display:flex; align-items:center; }
 @media(max-width:360px) { .connected-app .frame-summary-toggle { grid-template-columns:38px minmax(0,1fr) 70px 44px; } }
 
 /* Completed nights: result, visible momentum/replays, then the sporting archive. */
 .connected-app .completed-match-page :is(.momentum-section,.match-replays) { margin-top:16px; padding:16px; background:var(--walnut); border-radius:var(--radius-card); }
-.completed-match-page :is(.momentum-section,.match-replays) > h2 { margin:0 0 12px; font-size:18px; color:var(--text); }
-.match-replays .view-all-replays { width:100%; min-height:44px; margin-top:12px; }
+.completed-match-page .momentum-section > h2 { margin:0 0 12px; font-size:18px; color:var(--text); }
 .connected-app .completed-match-page .match-options { margin-top:16px; background:var(--surface); }
 .connected-app .frame-history-entry { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; min-height:80px; margin-top:16px; padding:16px; border:1px solid var(--line); border-radius:var(--radius-card); color:var(--text); background:var(--felt); text-align:left; }
 .frame-history-entry > span:first-child { display:grid; gap:6px; min-width:0; }
@@ -1105,7 +1117,7 @@
 @media(max-width:360px) { .frame-history-entry { padding:12px; gap:8px; } .modal:has(.frame-history-panel) { padding:12px; } }
 
 /* Upload is secondary to watching published footage. */
-.connected-app .match-replays .add-frame-recording { min-height:52px; background:transparent; border:1px solid var(--brass); color:var(--brass); }
+.connected-app .match-replays .add-frame-recording { min-height:44px; background:transparent; border:1px solid var(--brass); color:var(--brass); }
 
 .account-replays-link {
   display:flex; align-items:center; gap:12px; min-height:52px; padding:10px 14px;
@@ -1158,44 +1170,69 @@
 .replay-compression-option input { accent-color:var(--brass); }
 
 
-.modal:has(.recording-upload), .modal:has(.replay-frame-picker) {
+.modal:has(.recording-upload, .replay-frame-picker, .recording-cancel-confirm) {
+  width:min(460px, calc(100vw - 20px)); max-width:none;
   max-height:calc(100dvh - max(10px, env(safe-area-inset-top)) - max(10px, env(safe-area-inset-bottom)));
-  overscroll-behavior:contain;
+  padding:12px 14px 14px; overflow:auto; overscroll-behavior:contain;
+  background:var(--surface); color:var(--text); border:1px solid var(--line);
 }
-.recording-picker {
-  position:relative; display:grid; justify-items:center; gap:8px; min-width:0;
-  padding:16px; text-align:center; color:var(--text); background:var(--walnut);
-  border:1px solid var(--line); border-radius:var(--radius-control); cursor:pointer;
+.modal:has(.recording-upload[data-step=table]) { width:min(640px, calc(100vw - 20px)); }
+.modal:has(.recording-upload, .replay-frame-picker, .recording-cancel-confirm) > div:first-child { margin-bottom:8px; gap:8px; }
+.modal:has(.recording-upload, .replay-frame-picker, .recording-cancel-confirm) h2 { margin:0; font-size:18px; line-height:1.25; color:var(--text); }
+.modal:has(.recording-upload, .replay-frame-picker, .recording-cancel-confirm) .icon-button { color:var(--text); min-width:44px; min-height:44px; }
+.modal:has(.recording-upload, .replay-frame-picker, .recording-cancel-confirm) :focus-visible,
+.connected-app .match-replays :focus-visible { outline:2px solid #f2d59e; outline-offset:2px; }
+.match-replay-row :focus-visible { outline-offset:-2px; }
+.modal :is(.recording-upload, .replay-frame-picker) .annotation { color:#c2cdbf; font-size:.82rem; }
+.modal :is(.recording-upload, .replay-frame-picker) .button:not(.button-secondary) {
+  justify-content:center; min-height:44px; background:var(--brass); border-color:var(--brass); color:#10271d;
 }
-.recording-picker-input {
-  position:absolute; width:1px; height:1px; padding:0; overflow:hidden;
-  clip-path:inset(50%); white-space:nowrap;
+.modal :is(.recording-upload, .replay-frame-picker) .text-button { color:#ecd3a2; min-width:44px; min-height:44px; }
+.recording-upload, .recording-upload-fields:not([hidden]) { display:grid; gap:10px; }
+.recording-upload:focus { outline:none; }
+.modal .recording-upload [role=alert] { color:#ffb5a7; overflow-wrap:anywhere; }
+.recording-edit-table, .recording-recovery .text-button { justify-self:start; }
+.recording-recovery .text-button { display:inline-flex; align-items:center; }
+.recording-picker { position:relative; display:grid; align-items:center; gap:6px 10px; min-width:0; }
+.recording-picker:has(.recording-picker-name) {
+  grid-template-columns:minmax(0,1fr) auto; padding:2px 8px; background:#34271e;
+  border:1px solid #64523d; border-radius:var(--radius-control);
 }
-.recording-picker:focus-within { outline:2px solid var(--brass); outline-offset:3px; }
-.recording-picker:has(input:disabled) { cursor:default; opacity:.65; }
-.recording-picker-icon { display:grid; place-items:center; color:var(--brass); }
-.recording-picker-detail { display:grid; min-width:0; gap:2px; overflow-wrap:anywhere; }
-.recording-picker-detail > span { color:var(--muted); font-size:.875rem; }
-.recording-picker .button { justify-content:center; min-height:44px; width:100%; }
-.recording-picker-selected { grid-template-columns:auto minmax(0,1fr) auto; align-items:center; justify-items:start; text-align:left; min-height:58px; padding:8px 12px; }
-.recording-picker-change { color:var(--brass); font-weight:700; min-height:44px; display:grid; align-items:center; }
-.replay-frame-picker label.recording-picker-selected { gap:8px; }
-.recording-progress { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:6px 8px; }
-.recording-progress [role=status] { grid-column:1/-1; min-width:0; }
-.recording-progress progress { width:100%; height:8px; border:0; border-radius:8px; accent-color:var(--brass); }
-.recording-progress progress:indeterminate { grid-column:1/-1; }
-.recording-progress small { color:var(--muted); font-variant-numeric:tabular-nums; }
+.recording-picker-input { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); }
+.recording-picker-name { display:flex; align-items:center; gap:6px; min-width:0; font-size:.8rem; }
+.recording-picker-name svg { flex:none; color:var(--brass); }
+.recording-picker-name span { min-width:0; overflow-wrap:anywhere; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+.recording-picker .text-button { padding:4px 2px; font-size:.8rem; }
+.recording-progress {
+  display:grid; grid-template-columns:30px minmax(0,1fr); align-items:start; gap:8px;
+  padding:10px 12px; border:1px solid #466651; border-radius:var(--radius-control); background:#17382a;
+}
+.recording-progress-icon { display:grid; place-items:center; width:30px; height:30px; border-radius:8px; background:#0b151065; color:var(--brass); }
+.recording-progress-status strong { font-size:.94rem; line-height:1.3; }
+.recording-progress-status p { margin:2px 0 0; }
+.recording-progress-track { grid-column:2; height:3px; overflow:hidden; background:#0b1510; border-radius:4px; }
+.recording-progress-track span { display:block; height:100%; background:var(--brass); border-radius:inherit; transition:width 180ms ease-out; }
+.recording-progress-indeterminate { width:24px; margin-inline:auto; transition:none; animation:recording-progress-pulse 1.4s ease-in-out infinite alternate; }
+@keyframes recording-progress-pulse { from { opacity:.45; } to { opacity:1; } }
+.recording-keyboard-cursor { visibility:hidden; fill:#0b1510; stroke:#fff4d6; stroke-width:2; vector-effect:non-scaling-stroke; pointer-events:none; }
+.recording-table:focus-visible .recording-keyboard-cursor { visibility:visible; }
 .recording-table [data-selected] .recording-marker-dot { fill:#fff4d6; stroke:#bc8a45; stroke-width:3; }
 .recording-corner-adjust { display:flex; flex-wrap:wrap; align-items:center; gap:0 8px; }
 .recording-corner-adjust > div { display:flex; flex-wrap:wrap; }
 .recording-corner-adjust button { min-width:44px; min-height:44px; padding:4px 8px; }
-.modal:has(.recording-upload) h2, .modal:has(.replay-frame-picker) h2 { font-size:18px; line-height:1.3; }
-.modal :is(.recording-upload, .replay-frame-picker) .annotation { color:#b9c5b7; }
-.recording-progress progress[value]::-webkit-progress-bar { background:#0b1510; border-radius:8px; }
-.recording-progress progress[value]::-webkit-progress-value { background:var(--brass); border-radius:8px; }
-@media (max-width:420px) {
-  .recording-picker-selected { grid-template-columns:auto minmax(0,1fr); }
-  .recording-picker-selected .recording-picker-change { grid-column:2; }
+.modal .recording-table { min-height:132px; max-height:min(43dvh, 420px); }
+.modal .recording-corners .button-secondary { min-height:44px; color:var(--text); }
+@media (max-width: 600px) {
+  .modal:has(.recording-upload, .replay-frame-picker, .recording-cancel-confirm) {
+    inset:auto 0 0; margin:0 auto; width:100%; border-radius:18px 18px 0 0;
+    max-height:calc(100dvh - max(12px, env(safe-area-inset-top)));
+    padding-bottom:calc(14px + env(safe-area-inset-bottom));
+  }
+}
+@media (max-width:360px) {
+  .connected-app .completed-match-page .match-replays { padding:10px; }
+  .match-replay-row { gap:6px; }
+  .match-replay-info p { font-size:.8125rem; }
 }
 
 .connected-app .live-page .tonights-form { background:var(--surface); border:1px solid var(--line); padding:0 12px; }

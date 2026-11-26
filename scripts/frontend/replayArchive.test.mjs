@@ -9,6 +9,7 @@ const prelude = `
 const React={createElement:(type,props,...children)=>({type,props:props??{},children}),Fragment:'fragment'};
 const Icon='Icon',Modal='Modal',MatchDisclosureHeading='Disclosure',MatchRecordingPicker='MatchRecordingPicker',RecordingUploadAction='RecordingUploadAction';
 const useState=initial=>{const h=globalThis.archive,i=h.cursor++;if(!(i in h.states))h.states[i]=typeof initial==='function'?initial():initial;return [h.states[i],next=>h.states[i]=typeof next==='function'?next(h.states[i]):next]};
+const useId=()=> 'replay-list';
 const useRef=initial=>{const h=globalThis.archive,i=h.cursor++;return h.states[i]??(h.states[i]={current:initial})};
 const useEffect=(fn,deps)=>{const h=globalThis.archive;if(!h.inViewer)return;if(!h.viewerDeps||deps.some((v,i)=>v!==h.viewerDeps[i])){h.viewerCleanup?.();h.viewerDeps=deps;h.viewerCleanup=fn()}};
 const downloadFrameReplay=async()=>{};
@@ -24,7 +25,7 @@ const find = (tree, predicate) => nodes(tree).find(predicate)
 const button = (tree, label) => find(tree, n => n.type === 'button' && nodes(n).some(child => child.children.includes(label)))
 const tick = () => new Promise(resolve => setImmediate(resolve))
 function setup(rows, count=1, authorized=true, includeArchive=false) {
- globalThis.archive={states:[rows,'ready',0,null,false,false,[]],cursor:0,signed:[],removed:[]}
+ globalThis.archive={states:[rows,'ready',0,null,false,null,false,[]],cursor:0,signed:[],removed:[]}
  const frames=Array.from({length:count},(_,i)=>frame(i+1))
  return () => {
   archive.cursor=0
@@ -33,7 +34,7 @@ function setup(rows, count=1, authorized=true, includeArchive=false) {
   if(!viewer){
    archive.viewerCleanup?.()
    archive.viewerCleanup=archive.viewerDeps=undefined
-   archive.states.length=7
+   archive.states.length=8
    return tree
   }
   archive.inViewer=true
@@ -87,7 +88,7 @@ test('Add recording opens the same upload dialog used for managing an existing r
   const render=()=>{archive.cursor=0;return RecordingUploadAction({userId:'account',frame:frame(1),onPublished(){}})}
   let tree=render()
   const action=find(tree,n=>n.type==='button');action.props.onClick();tree=render()
-  assert.ok(find(tree,n=>n.type==='Modal'))
+  assert.ok(find(tree,n=>n.props.onClose && n.props.frame?.id === 'frame-1'))
   assert.equal(find(tree,n=>n.props.initialStatus===pending)?.props.initialStatus,pending)
  }
 })
@@ -118,14 +119,14 @@ test('frame disclosure is a native full-row button, independent of Replay; obser
 })
 
 test('dedicated archive shares published frames and excludes them from the Add frame selector',()=>{
- for(const rows of [[],[replay(1)],[replay(1),replay(2)],Array.from({length:5},(_,i)=>replay(i+1))]) {
-  globalThis.archive={states:[rows,'ready',0,null,false,false,[]],cursor:0,signed:[],removed:[]}
-  const frames=Array.from({length:6},(_,i)=>frame(i+1))
+ for(const rows of [[],[replay(1)],[replay(1),replay(2)],Array.from({length:6},(_,i)=>replay(i+1))]) {
+  globalThis.archive={states:[rows,'ready',0,null,false,null,false,[]],cursor:0,signed:[],removed:[]}
+  const frames=Array.from({length:7},(_,i)=>frame(i+1))
   const render=()=>{archive.cursor=0;return FrameReplays({userId:'account',sessionId:'session',archiveFrames:frames,upload:{playerId:'player',detailEligible:true},describeFrame:f=>`Donal won · ${f.frame_number}`,children:()=>null})}
-  let tree=render();const heading=find(tree,n=>n.type==='h2');assert.ok(heading.children.join('').includes(` · ${rows.length}`))
-  assert.equal(nodes(tree).filter(n=>n.type==='article').length,Math.min(3,rows.length))
-  if(rows.length>3){find(tree,n=>n.props.className?.includes('view-all-replays')).props.onClick();tree=render();assert.equal(nodes(tree).filter(n=>n.type==='article').length,rows.length)}
-  assert.notEqual(find(tree,n=>n.props.id==='match-replays-content').props.hidden,true)
+  let tree=render();const summary=find(tree,n=>n.props.className==='match-replays-heading').children[1];assert.equal(summary.children.join(''),`${rows.length} total · ${rows.length} ready`)
+  assert.equal(nodes(tree).filter(n=>n.props.className==='match-replay-row').length,Math.min(5,rows.length))
+  if(rows.length>5){find(tree,n=>n.props.className?.includes('view-all-replays')).props.onClick();tree=render();assert.equal(nodes(tree).filter(n=>n.props.className==='match-replay-row').length,rows.length)}
+  assert.notEqual(find(tree,n=>n.props.className==='match-replays-content').props.hidden,true)
   button(tree,'Add frame recording').props.onClick();tree=render()
   const picker=find(tree,n=>n.type==='MatchRecordingPicker')
   assert.deepEqual(picker.props.eligibleFrames.map(f=>f.id),frames.filter(f=>!rows.some(r=>r.frame_id===f.id)).map(f=>f.id))
@@ -143,7 +144,7 @@ test('frame outcomes use only linked participant UUIDs; tied match scores never 
 
 test('active recordings from either participant block picker entries and show current lifecycle',()=>{
  const render=setup([],4,true,true)
- render();archive.states[6]=[
+ render();archive.states[7]=[
   {frame_id:'frame-1',state:'uploading',owned:false,failed:false},
   {frame_id:'frame-2',state:'processing',owned:false,failed:false},
   {frame_id:'frame-3',state:'cleanup',owned:true,failed:false},
@@ -151,11 +152,11 @@ test('active recordings from either participant block picker entries and show cu
  let tree=render()
  assert.equal(nodes(tree).filter(n=>n.type==='RecordingUploadAction').length,1)
  assert.match(JSON.stringify(tree),/Uploading/)
- assert.match(JSON.stringify(tree),/Processing replay/)
+ assert.match(JSON.stringify(tree),/Preparing replay/)
  assert.match(JSON.stringify(tree),/Removing recording/)
  button(tree,'Add frame recording').props.onClick();tree=render()
  assert.deepEqual(find(tree,n=>n.type==='MatchRecordingPicker').props.eligibleFrames.map(f=>f.id),['frame-4'])
- archive.states[5]=false
- archive.states[6]=[];tree=render()
+ archive.states[6]=false
+ archive.states[7]=[];tree=render()
  assert.equal(nodes(tree).filter(n=>n.type==='RecordingUploadAction').length,4)
 })

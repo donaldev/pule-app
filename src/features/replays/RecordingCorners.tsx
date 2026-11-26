@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { displaySize, displayToSource, sourceToDisplay, validCorners, type Point, type RecordingGeometry } from './recordingGeometry'
 import { clampViewport, fitScale, imageToStage, initialViewport, limitToImage, replaceCorner, stageToImage, zoomViewport, type Viewport } from './cornerViewport'
 
@@ -10,6 +10,7 @@ type Gesture =
 const SEEK_STEP = 0.25
 const SEEK_EPSILON = 0.001
 const TOUCH_SLOP = 6
+const cursorDirections: Record<string, Point> = { ArrowLeft: [-1, 0], ArrowUp: [0, -1], ArrowRight: [1, 0], ArrowDown: [0, 1] }
 const distance = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1])
 const midpoint = (a: Point, b: Point): Point => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
 
@@ -41,6 +42,8 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
   const [view, setView] = useState(initialViewport)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [duration, setDuration] = useState(0)
+  const keyboardHelp = useId()
+  const [cursor, setCursor] = useState<Point | null>(null)
   const [time, setTime] = useState(0)
   const [ready, setReady] = useState(false)
   const [seeking, setSeeking] = useState(false)
@@ -57,6 +60,7 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
     const element = stage.current
     const observer = new ResizeObserver(() => {
       const bounds = element.getBoundingClientRect()
+      if (!bounds.width || !bounds.height) return
       setSize({ width: bounds.width, height: bounds.height })
       const next = clampViewport(viewport.current, bounds, { width, height })
       viewport.current = next
@@ -226,15 +230,41 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
     if (point[0] !== selectedPoint[0] || point[1] !== selectedPoint[1]) onChange(replaceCorner(corners, selectedCorner, point))
   }
 
+  const cursorPoint: Point = cursor ?? [width / 2, height / 2]
+
+  function handleStageKey(event: KeyboardEvent<HTMLDivElement>) {
+    if (!ready || disabled || seeking || event.altKey || event.ctrlKey || event.metaKey) return
+    const direction = cursorDirections[event.key]
+    if (direction) {
+      event.preventDefault()
+      const step = (event.shiftKey ? 16 : 2) / markerScale
+      const point = limitToImage([cursorPoint[0] + direction[0] * step, cursorPoint[1] + direction[1] * step], image)
+      setCursor(point)
+      const [x, y] = imageToStage(point, viewport.current, size, image)
+      const current = viewport.current
+      updateView(clampViewport({
+        ...current, x: current.x + Math.min(0, size.width - 12 - x) + Math.max(0, 12 - x),
+        y: current.y + Math.min(0, size.height - 12 - y) + Math.max(0, 12 - y),
+      }, size, image))
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      if (corners.length < 4 && !event.repeat) {
+        lastTap.current = cursorPoint
+        setSelectedCorner(null)
+        onChange([...corners, displayToSource(cursorPoint, geometry)])
+      }
+    }
+  }
+
   const visibleCorners = (drag ? replaceCorner(corners, drag.index, drag.point) : corners).map(point => sourceToDisplay(point, geometry))
   const valid = validCorners(corners, geometry.width, geometry.height)
 
   return <section className="recording-corners" aria-label="Replay table corners">
     <video ref={video} src={src} hidden playsInline preload="auto" onLoadedData={finishSeek} onSeeked={finishSeek}
       onError={() => fail('This browser cannot play the selected video. Export a compatible MP4.')} />
-    <p className="annotation">Find a clear view of the table. Tap the corners in order around the table. Pinch to zoom, then tap a marker for fine adjustments.</p>
+    <p className="annotation">Mark the four table corners in order. Pinch to zoom or use the zoom controls.</p>
     <div className="recording-timeline">
-      <label>Choose a clear video frame <span>{timestamp(time)}</span>
+      <label>Video frame <span>{timestamp(time)}</span>
         <input type="range" min={0} max={Math.max(0, duration - 0.001)} step="any" value={time} disabled={!duration || disabled}
           aria-valuetext={timestamp(time)} onChange={event => seek(Number(event.currentTarget.value))} />
       </label>
@@ -245,7 +275,9 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
     </div>
     {!ready && !error && <p className="annotation" role="status">Opening video preview…</p>}
     {error && <p role="alert">{error}</p>}
+    <p id={keyboardHelp} className="sr-only">Use arrow keys to move the cursor, Shift with an arrow key to move faster, and Enter to place a corner.</p>
     <div ref={stage} className="recording-table" style={{ aspectRatio: width / height }}
+      role="group" aria-label="Table preview" aria-describedby={keyboardHelp} tabIndex={ready && !disabled ? 0 : -1} onKeyDown={handleStageKey}
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={event => pointerEnd(event)}
       onPointerCancel={event => pointerEnd(event, true)} onLostPointerCapture={event => pointerEnd(event, true)}>
       <div className="recording-table-layer" style={{ width: width * imageScale, height: height * imageScale,
@@ -254,6 +286,7 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
         <svg viewBox={`0 0 ${width} ${height}`} aria-label="Table corner selection" role="img" preserveAspectRatio="none">
           {visibleCorners.length === 4 ? <polygon points={visibleCorners.map(point => point.join(',')).join(' ')} />
             : <polyline points={visibleCorners.map(point => point.join(',')).join(' ')} />}
+          <circle className="recording-keyboard-cursor" cx={cursorPoint[0]} cy={cursorPoint[1]} r={6 / markerScale} />
           {visibleCorners.map(([x, y], index) => <g key={index} data-corner-index={index} data-selected={selectedCorner === index || undefined}>
             <circle cx={x} cy={y} r={22 / markerScale} fill="transparent" className="recording-marker-hit" />
             <circle cx={x} cy={y} r={11 / markerScale} className="recording-marker-dot" />
@@ -281,6 +314,6 @@ export function RecordingCorners({ src, geometry, corners, confirmed, disabled, 
     </div>}
     <p className="annotation" aria-live="polite">{corners.length} of 4 corners marked.{corners.length === 4 && !valid && ' Mark four distinct corners in order around the table.'}</p>
     <button type="button" className="button button-secondary" disabled={!valid || !ready || seeking || !!drag || confirmed || disabled}
-      onClick={onConfirm}>{confirmed ? 'Corners confirmed' : 'Confirm corners'}</button>
+      onClick={onConfirm}>Confirm table</button>
   </section>
 }

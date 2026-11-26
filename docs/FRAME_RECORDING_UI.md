@@ -102,3 +102,23 @@ orientation at all four rotations. ESLint and TypeScript/Vite build passed. Brow
 component tests use controlled hooks and mocked network calls; the MP4 geometry
 tests use actual FFmpeg-produced matrices/pixel data. No live TUS transfer or
 physical-device browser result is claimed.
+
+## November 25, 2026 replay UI refinement verification
+
+Reusable patterns are documented in the [Pule design system](DESIGN_SYSTEM.md).
+
+### Verified locally
+
+- TypeScript and the production build passed.
+- Headless Chrome at 320, 375, 390, and 430 CSS pixels verified list expansion, native file chooser activation, long filenames, and dialog focus. The local fixture also exercised pointer and keyboard calibration, playback, reduced motion, and browser compression of a 101 MB MP4 with the compressed recovery copy available.
+- The fixture used mocked transfer and server responses to check progress, upload cancellation, and the receipt shown after acceptance.
+
+### Outstanding technical issues
+
+- ESLint still reports two existing `react-hooks/set-state-in-effect` errors and one `react-hooks/exhaustive-deps` warning in [RecordingUpload.tsx](../src/features/replays/RecordingUpload.tsx).
+- ESLint also reports an existing `no-control-regex` error in the MP4 metadata parser. [recordingGeometry.ts](../src/features/replays/recordingGeometry.ts)
+
+### Server interactions pending verification for this refinement
+
+- Verify reservation, actual transfer, finalization, and cancellation or retry against the configured backend. The Chrome fixture simulated the transfer and server acknowledgments.
+- Verify the live processing transition from accepted upload through worker completion, polling, and authorized signed playback. Local playback used fixture media.

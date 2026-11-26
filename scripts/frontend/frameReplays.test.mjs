@@ -34,7 +34,7 @@ component=component.replace(/^import .*$/gm,'')
 const {FrameReplays}=await import(compile(`
 const React={createElement:(type,props,...children)=>({type,props:props??{},children})};const Modal='modal';
 const useState=value=>{const h=globalThis.h,i=h.cursor++;if(!(i in h.states))h.states[i]=value;return [h.states[i],next=>{h.states[i]=typeof next==='function'?next(h.states[i]):next}]};
-const useRef=value=>{const h=globalThis.h,i=h.cursor++;return h.states[i]??(h.states[i]={current:value})};
+const useId=()=> 'replay-list';const useRef=value=>{const h=globalThis.h,i=h.cursor++;return h.states[i]??(h.states[i]={current:value})};
 const useEffect=f=>globalThis.h.effects.push(f);
 const listFrameReplays=(...args)=>{globalThis.h.reads.push(args);return globalThis.h.list()};
 const signFrameReplay=(...args)=>{globalThis.h.signs.push(args);return globalThis.h.sign()};

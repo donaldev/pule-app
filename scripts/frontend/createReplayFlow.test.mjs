@@ -63,7 +63,8 @@ function mark(render, points) {
  editor(render()).onDuration(100)
  editor(render()).onChange(points.map(point=>geometry.displayToSource(point,h.g)))
  const tree=render()
- assert.equal(find(tree,n=>n.type==='button' && (n.children.includes('Save & Create Replay') || n.children.includes('Compress recording'))).props.disabled,true)
+ assert.equal(button(tree,'Upload recording'),undefined)
+ assert.equal(button(tree,'Compress video'),undefined)
  editor(tree).onConfirm()
  return render()
 }
@@ -77,15 +78,15 @@ test('double-click reserves, transfers and queues once; ambiguous failures prese
    await tick()
    tree=mark(render,[[20,20],[620,20],[620,460],[20,460]])
    if(failure)h[failure]=true
-   assert.equal(button(tree,'Save & Create Replay').props.disabled,false)
-   button(tree,'Save & Create Replay').props.onClick();button(tree,'Save & Create Replay').props.onClick();await tick();tree=render()
+   assert.equal(button(tree,'Upload recording').props.disabled,false)
+   button(tree,'Upload recording').props.onClick();button(tree,'Upload recording').props.onClick();await tick();tree=render()
    const sequence=h.calls.filter(c=>!['persist','published'].includes(c[0])).map(c=>c[0])
    assert.deepEqual(sequence,failure==='interrupted'?['reserve','transfer']:failure==='finalizeFailed'?['reserve','transfer','finalize']:['reserve','transfer','finalize','queue'])
    assert.ok(h.calls.findIndex(c=>c[0]==='persist')<h.calls.findIndex(c=>c[0]==='reserve'))
    const operations=h.calls.filter(c=>c[0]==='persist').map(c=>c[1].operation)
    assert.equal(new Set(operations).size,1)
-   if(failure){assert.ok(find(tree,n=>n.props.role==='alert'));assert.equal(button(tree,'Save & Create Replay').props.disabled,false)}
-   else {assert.match(JSON.stringify(tree),/Upload complete/);const queue=h.calls.find(c=>c[0]==='queue');assert.equal(validCorners(queue[3],640,480),true)}
+   if(failure){assert.ok(find(tree,n=>n.props.role==='alert'));assert.equal(button(tree,'Resume upload').props.disabled,false)}
+   else {assert.match(JSON.stringify(tree),/Recording received/);const queue=h.calls.find(c=>c[0]==='queue');assert.equal(validCorners(queue[3],640,480),true)}
   }
  } finally {URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke}
 })
@@ -104,13 +105,13 @@ test('pilot hands off rotated corners and compressed bytes, and retries the same
   const toggle=find(tree,n=>n.type==='input'&&n.props.type==='checkbox')
   assert.equal(toggle.props.checked,false)
   toggle.props.onChange({currentTarget:{checked:true}});tree=render()
-  button(tree,'Compress recording').props.onClick();await tick();tree=render()
+  button(tree,'Compress video').props.onClick();await tick();tree=render()
   assert.deepEqual(h.calls.filter(c=>c[0]!=='persist'),[['compress']])
   assert.deepEqual(h.hashes,['recording_compressed.mp4'])
   h.interrupted=true
-  button(tree,'Save & Create Replay').props.onClick();await tick();tree=render()
+  button(tree,'Upload recording').props.onClick();await tick();tree=render()
   h.interrupted=false
-  button(tree,'Save & Create Replay').props.onClick();await tick()
+  button(tree,'Resume upload').props.onClick();await tick()
   const reservations=h.calls.filter(c=>c[0]==='reserve')
   assert.equal(reservations.length,1)
   assert.equal(reservations[0][4],50)
@@ -128,13 +129,12 @@ test('an oversized original requires compression even with the optional pilot fl
  const restore=mockPreviewUrl()
  try {
   const tree=await selectOversized(render)
-  assert.equal(button(tree,'Save & Create Replay'),undefined)
+  assert.equal(button(tree,'Upload recording'),undefined)
   assert.equal(find(tree,n=>n.type==='input'&&n.props.type==='checkbox'),undefined)
-  assert.match(JSON.stringify(tree),/must be compressed/)
-  button(tree,'Compress recording').props.onClick();await tick()
+  button(tree,'Compress video').props.onClick();await tick()
   const ready=render()
-  assert.equal(button(ready,'Save & Create Replay').props.disabled,false)
-  button(ready,'Save & Create Replay').props.onClick();await tick()
+  assert.equal(button(ready,'Upload recording').props.disabled,false)
+  button(ready,'Upload recording').props.onClick();await tick()
   assert.equal(h.calls.find(c=>c[0]==='reserve')[4],50)
   assert.deepEqual(h.calls.find(c=>c[0]==='transfer'),['transfer',50,'large_compressed.mp4'])
   assert.ok(h.calls.some(c=>c[0]==='queue'))
@@ -151,21 +151,21 @@ test('failed, cancelled, unsupported and oversized compression cannot fall back 
     h.encoderAvailable=false
     for(const effect of h.effects) effect()
     await tick();tree=render()
-    assert.equal(button(tree,'Compress recording').props.disabled,true)
+    assert.equal(button(tree,'Compress video').props.disabled,true)
    } else {
     h.compressionFailure=mode
-    button(tree,'Compress recording').props.onClick();await tick()
+    button(tree,'Compress video').props.onClick();await tick()
     if(mode==='cancel') { button(render(),'Cancel compression').props.onClick();await tick() }
     tree=render()
-    assert.equal(button(tree,'Compress recording').props.disabled,false)
+    assert.equal(button(tree,'Compress video').props.disabled,false)
    }
    assert.ok(find(tree,n=>n.props.role==='alert'))
-   assert.equal(button(tree,'Save & Create Replay'),undefined)
+   assert.equal(button(tree,'Upload recording'),undefined)
    assert.equal(h.calls.some(c=>['reserve','transfer','finalize','queue'].includes(c[0])),false)
    if(mode==='cancel'){
     h.compressionFailure=null
-    button(tree,'Compress recording').props.onClick();await tick()
-    assert.equal(button(render(),'Save & Create Replay').props.disabled,false)
+    button(tree,'Compress video').props.onClick();await tick()
+    assert.equal(button(render(),'Upload recording').props.disabled,false)
     assert.equal(h.calls.some(c=>c[0]==='reserve'),false)
    }
   }
@@ -180,8 +180,8 @@ test('an existing oversized R2 reservation is blocked before selecting a file or
  await tick()
  const tree=render()
  assert.equal(find(tree,n=>n.type==='RecordingFilePicker'),undefined)
- assert.equal(button(tree,'Save & Create Replay').props.disabled,true)
- assert.match(JSON.stringify(tree),/saved upload exceeds/)
+ assert.equal(button(tree,'Upload recording'),undefined)
+ assert.match(JSON.stringify(tree),/saved upload is too large/)
  assert.equal(h.calls.some(c=>['reserve','transfer','finalize','queue'].includes(c[0])),false)
 })
 
@@ -211,7 +211,7 @@ test('replacement clears old corners and hashing starts only when the original i
   const progress=tree=>find(tree,n=>n.type==='RecordingProgress').props
   picker(render()).props.onChoose({name:'first.mp4',type:'video/mp4',size:100})
   await tick()
-  assert.equal(progress(render()).title,'Reading video details')
+  assert.equal(progress(render()).title,'Opening video')
   assert.equal(progress(render()).percent,undefined)
   openDetails();await tick()
   mark(render,[[20,20],[620,20],[620,460],[20,460]])
@@ -225,8 +225,8 @@ test('replacement clears old corners and hashing starts only when the original i
   mark(render,[[20,20],[620,20],[620,460],[20,460]])
   let finishHash
   h.holdHash=new Promise(resolve=>{finishHash=resolve})
-  button(render(),'Save & Create Replay').props.onClick();await tick()
-  assert.equal(progress(render()).title,'Preparing video')
+  button(render(),'Upload recording').props.onClick();await tick()
+  assert.equal(progress(render()).title,'Preparing upload')
   assert.equal(progress(render()).percent,37)
   assert.deepEqual(h.hashes,['replacement.mp4'])
   assert.equal(h.calls.some(c=>c[0]==='reserve'),false)

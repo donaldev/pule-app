@@ -109,7 +109,7 @@ const uiPrelude=`const navigator={locks:{request:async(key,options,fn)=>fn({})}}
 const React={createElement:(type,props,...children)=>{if(props?.ref&&type==='video')props.ref.current={...displaySize(globalThis.h.g),videoWidth:displaySize(globalThis.h.g).width,videoHeight:displaySize(globalThis.h.g).height,duration:100,pause(){}};if(props?.ref&&type==='canvas')props.ref.current={getContext:()=>({drawImage(){}})};return {type,props:props??{},children}},Fragment:'fragment'};
 const Modal='modal';
 const useState=initial=>{const h=globalThis.h,i=h.cursor++;if(!(i in h.states))h.states[i]=typeof initial==='function'?initial():initial;return [h.states[i],next=>{h.states[i]=typeof next==='function'?next(h.states[i]):next}]};
-const useRef=value=>{const h=globalThis.h,i=h.cursor++;return h.states[i]??(h.states[i]={current:value})};const useEffect=f=>globalThis.h.effects.push(f);
+const useId=()=> 'replay-list';const useRef=value=>{const h=globalThis.h,i=h.cursor++;return h.states[i]??(h.states[i]={current:value})};const useEffect=f=>globalThis.h.effects.push(f);
 const recordingKey=()=> 'journal';const readRecording=()=>globalThis.h.initial;
 const saveRecording=(key,draft)=>{if(globalThis.h.storageFailed)throw Error('Storage blocked');globalThis.h.calls.push(['persist',structuredClone(draft)])};
 const hashRecording=async()=> 'a'.repeat(64);const inspectRecording=async()=>globalThis.h.g;
