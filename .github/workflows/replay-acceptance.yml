@@ -6,13 +6,14 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Manual acceptance operation (process-one claims the next eligible queued recording)
+        description: Manual replay operation (process-one claims at most one recording)
         type: choice
         required: true
         default: check
         options:
           - check
           - process-one
+          - process-queue
           - cleanup-only
 
 permissions:
@@ -30,6 +31,8 @@ jobs:
     # Includes setup and a long-running recording; remains below the 40-minute SQL lease.
     timeout-minutes: 38
     steps:
+      - name: Record worker start time
+        run: echo "REPLAY_JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
@@ -83,9 +86,10 @@ jobs:
           print('Supabase/R2 credentials and at least 8 GiB scratch verified; no recording claimed.')
           PY
       - name: Process queued recordings
-        if: github.event_name == 'schedule' || inputs.operation == 'process-one'
+        if: github.event_name == 'schedule' || inputs.operation == 'process-one' || inputs.operation == 'process-queue'
         timeout-minutes: 35
         env:
+          REPLAY_OPERATION: ${{ inputs.operation }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -93,15 +97,19 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
-            python replay-worker/replay_worker.py --max-jobs 5
-          else
-            python replay-worker/replay_worker.py
+          # Respect both the 35-minute step and the 38-minute job, leaving a minute for teardown.
+          budget=$((37 * 60 - ($(date +%s) - REPLAY_JOB_STARTED)))
+          if (( budget > 35 * 60 )); then budget=$((35 * 60)); fi
+          if (( budget < 0 )); then budget=0; fi
+          max_jobs=1
+          if [[ "$GITHUB_EVENT_NAME" == schedule || "$REPLAY_OPERATION" == process-queue ]]; then
+            max_jobs=5
           fi
+          python replay-worker/replay_worker.py --max-jobs "$max_jobs" --runtime-seconds "$budget"
 
   cleanup:
-    # Independent of long-running processing, so cleanup keeps its five-minute cadence.
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.operation == 'process-one' || inputs.operation == 'cleanup-only')
+    # Independent of long-running processing, so cleanup can run on delivered schedule ticks.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.operation == 'process-one' || inputs.operation == 'process-queue' || inputs.operation == 'cleanup-only')
     runs-on: ubuntu-24.04
     environment: replay-acceptance
     timeout-minutes: 5

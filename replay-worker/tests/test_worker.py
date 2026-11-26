@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import cv2
 import numpy as np
-from replay_worker import SupabaseAPI, validate_job, validate_corners, verify_video, run_once, process_recording, prepare_analysis_source, verify_toolchain, main
+from replay_worker import SupabaseAPI, validate_job, validate_corners, verify_video, run_once, process_recording, prepare_analysis_source, verify_toolchain, main, run_batch, CLAIM_RUNTIME_RESERVE_SECONDS, MAX_BATCH_JOBS
 
 UID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 LEASE = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
@@ -49,6 +49,111 @@ class FakeAPI:
         self.calls.append(('upload', key))
         if self.fail == 'upload':
             raise RuntimeError('simulated failure')
+
+
+class BatchTests(unittest.TestCase):
+    def setUp(self):
+        self.now = 0
+        self.jobs = []
+        self.api = FakeAPI()
+        self.calls = self.api.calls
+        original_rpc = self.api.rpc
+
+        def rpc(name, args):
+            if name == 'claim_frame_replay_processing':
+                self.calls.append((name, args))
+                return self.jobs.pop(0) if self.jobs else None
+            return original_rpc(name, args)
+
+        self.api.rpc = rpc
+        self.failed_ids = set()
+        self.processing_seconds = 0
+
+        def processor(source, job, work):
+            self.now += self.processing_seconds
+            if job['job_id'] in self.failed_ids:
+                raise ValueError('private recording detail')
+            output = work / 'replay.mp4'
+            output.write_bytes(b'replay')
+            return output, {'size_bytes': 6, 'clip_count': 1}
+
+        for mock in (
+            patch('replay_worker.verify_video', return_value={'size_bytes': 6, 'duration_seconds': 1}),
+            patch('sys.stdout', new_callable=io.StringIO),
+            patch.dict('os.environ', {'GITHUB_STEP_SUMMARY': ''}),
+        ):
+            mock.start()
+            self.addCleanup(mock.stop)
+        self.processor = processor
+
+    def job(self, index):
+        job_id = f'aaaaaaaa-aaaa-aaaa-aaaa-{index:012d}'
+        return {**JOB, 'job_id': job_id, 'source_key': PREFIX + job_id + '.mp4'}
+
+    def batch(self, seconds=60, max_jobs=MAX_BATCH_JOBS):
+        def attempt(api, **kwargs):
+            return run_once(api, processor=self.processor, **kwargs)
+        with patch('replay_worker.run_once', side_effect=attempt):
+            return run_batch(self.api, max_jobs=max_jobs, clock=lambda: self.now,
+                             deadline=self.now + CLAIM_RUNTIME_RESERVE_SECONDS + seconds)
+
+    def test_empty_queue(self):
+        self.assertEqual(self.batch(), {
+            'processed': 0, 'completed': 0, 'failed': 0, 'unconfirmed': 0,
+            'stop': 'queue_empty', 'elapsed_seconds': 0,
+        })
+
+    def test_sequential_publication_after_failure_and_explicit_retry_next_run(self):
+        first, second = self.job(1), self.job(2)
+        self.jobs = [first, second]
+        self.failed_ids.add(first['job_id'])
+        summary = self.batch()
+        self.assertEqual((summary['failed'], summary['completed'], summary['stop']), (1, 1, 'queue_empty'))
+        self.assertEqual([name for name, _ in self.calls], [
+            'claim_frame_replay_processing', 'download', 'fail_frame_replay_processing',
+            'claim_frame_replay_processing', 'download', 'upload', 'complete_frame_replay_processing',
+            'claim_frame_replay_processing',
+        ])
+        self.assertNotIn('private recording detail', sys.stdout.getvalue())
+        self.assertNotIn(first['job_id'], sys.stdout.getvalue())
+        # Only an externally eligible new lease can be processed on a later run.
+        retry_lease = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+        self.jobs = [{**first, 'lease_id': retry_lease, 'destination_key': PREFIX + retry_lease + '.mp4'}]
+        self.failed_ids.clear()
+        self.assertEqual(self.batch()['completed'], 1)
+        self.assertEqual(self.calls[-2][1]['p_lease'], retry_lease)
+
+    def test_duplicate_claim_stops_before_a_second_download(self):
+        first = self.job(1)
+        self.jobs = [first, first]
+        self.failed_ids.add(first['job_id'])
+        summary = self.batch()
+        self.assertEqual((summary['failed'], summary['stop']), (1, 'duplicate_claim'))
+        self.assertEqual(sum(name == 'download' for name, _ in self.calls), 1)
+
+    def test_time_budget_applies_before_first_and_later_claims(self):
+        self.jobs = [self.job(1), self.job(2)]
+        self.assertEqual(self.batch(seconds=-1)['stop'], 'runtime_limit')
+        self.assertEqual(self.calls, [])
+        self.processing_seconds = 61
+        summary = self.batch()
+        self.assertEqual((summary['completed'], summary['stop'], summary['elapsed_seconds']), (1, 'runtime_limit', 61))
+        self.assertEqual(len(self.jobs), 1)
+
+    def test_batch_count_and_manual_single_job_cap(self):
+        self.jobs = [self.job(index) for index in range(MAX_BATCH_JOBS + 2)]
+        self.assertEqual(self.batch()['stop'], 'job_limit')
+        self.assertEqual(len(self.jobs), 2)
+        self.assertEqual(self.batch(max_jobs=1)['completed'], 1)
+        self.assertEqual(len(self.jobs), 1)
+
+    def test_default_cli_passes_one_job(self):
+        with patch('sys.argv', ['replay_worker.py']), patch('replay_worker.verify_toolchain'), \
+             patch('replay_worker.SupabaseAPI'), patch.dict('os.environ', {
+                 'R2_ACCOUNT_ID': '', 'SUPABASE_URL': 'https://example.com', 'SUPABASE_SERVICE_ROLE_KEY': 'test',
+             }), patch('replay_worker.run_batch', return_value={'failed': 0, 'unconfirmed': 0, 'stop': 'job_limit'}) as batch:
+            main()
+            self.assertEqual(batch.call_args.kwargs['max_jobs'], 1)
 
 
 class WorkerTests(unittest.TestCase):

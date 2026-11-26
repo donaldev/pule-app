@@ -1,34 +1,33 @@
-# Manual replay acceptance test only
+# Replay worker and acceptance
 
-This is a short-lived exception to the Linux/systemd worker hosting steps in
-[the deployment runbook](FRAME_REPLAY_DEPLOYMENT_AUDIT.md). The verified backup,
-atomic 002→003→004 release, protected historical rows and private Storage policies
-remain prerequisites. It is not ongoing production processing.
+The verified backup, atomic 002→003→004 release, protected historical rows and
+private Storage policies in the [deployment runbook](FRAME_REPLAY_DEPLOYMENT_AUDIT.md)
+remain prerequisites.
 
 ## GitHub worker
 
-`.github/workflows/replay-acceptance.yml` runs only through **Actions → Replay
-acceptance test → Run workflow**, on `main`. There is no schedule, push or PR
-trigger. The `replay-acceptance` GitHub environment holds `SUPABASE_URL` and
-`SUPABASE_SERVICE_ROLE_KEY`; restrict that environment to the `main` branch.
-Never place these secrets in the frontend or repository files.
+The **Replay acceptance test** workflow requests a run every five minutes on
+`main`. GitHub can delay or skip scheduled runs. The workflow also supports
+manual dispatch from **Actions → Replay acceptance test → Run workflow**.
+Keep the `replay-acceptance` environment restricted to `main` and keep credentials
+out of frontend builds and logs.
 
-The standard Ubuntu 24.04 runner installs the existing dependencies, validates
-FFmpeg rotation support before claiming work, and invokes the unchanged worker.
-`check` (the default) verifies tools and credentials with a read-only metadata
-request, without claiming a job. Operator SQL postflight must separately verify
-that the processing/cleanup RPCs and ACLs are installed correctly.
+- **check** verifies the toolchain and credentials with a read-only metadata request.
+- **process-one** claims at most one eligible job.
+- **process-queue** uses the scheduled batch path and claims up to five jobs sequentially.
+- **cleanup-only** runs one bounded cleanup pass without claiming processing work.
 
-`process-one` claims the next eligible queued recording, not a user-supplied ID.
-Before dispatch, verify that only the intended test recording is queued. The
-existing SQL lease/eligibility checks remain authoritative. One worker runs at a
-time, with no cancellation of an active run; the whole job has a 30-minute limit
-versus the 40-minute processing lease. The processing step is limited to 25 minutes.
-One bounded cleanup pass follows even on failure; it only deletes objects assigned
-by the existing durable cleanup queue. `cleanup-only` allows another explicit pass
-without processing a recording. There are no video artifacts, upload-artifact
-steps, dependency caches or credential/video debug logging. Review workflow status
-and generic worker results for errors; do not turn on Actions secret/debug logging.
+The processing job has a 38-minute timeout, including setup. Its processing step
+has a 35-minute hard timeout. Before each claim the worker requires at least
+34 minutes of remaining budget for source download, processing and publication.
+The processing concurrency group serializes scheduled and manual runs. The
+existing SQL leases govern claims and fence publication. The worker reports
+counts, elapsed time and its stop reason in the Actions summary.
+
+Publication enqueues source cleanup. The separate cleanup job consumes the
+durable queue and handles expired work under the existing safeguards. It can run
+independently of processing, so recently published work may be cleaned by a
+later pass.
 
 For this Free-plan pilot, retain the existing private `frame-replays` bucket's
 **26214400-byte (25 MiB)** limit and configure private `frame-recordings` identically,

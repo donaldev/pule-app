@@ -26,8 +26,11 @@ from r2_source import R2Source, MAX_SOURCE_BYTES
 from replay_processor import analysis_crop, ANALYSIS_WIDTH, MAX_ANALYSIS_HEIGHT
 
 MAX_BYTES = 262144000
-# Leave 25 minutes of the Actions processing step for the last claimed job.
-ADDITIONAL_CLAIM_WINDOW_SECONDS = 10 * 60
+MAX_BATCH_JOBS = 5
+MAX_BATCH_RUNTIME_SECONDS = 35 * 60
+# Allow 20 minutes for processing, up to 10 for R2 download, and four
+# for claiming, probes, remuxes and publication. Actions enforces the hard timeout.
+CLAIM_RUNTIME_RESERVE_SECONDS = 34 * 60
 UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 KEY_RE = re.compile(rf'^{UUID}/{UUID}/{UUID}\.mp4$')
 
@@ -211,28 +214,26 @@ def verify_video(path):
     return {'duration_seconds': duration, 'size_bytes': size}
 
 
-def run_once(api, processor=process_recording, r2=None):
+def run_once(api, processor=process_recording, r2=None, seen=None):
     try:
         job = api.rpc('claim_r2_frame_replay_processing', {}) if r2 is not None else None
         if job is None:
             job = api.rpc('claim_frame_replay_processing', {})
-    except ValueError as exc:
-        print(json.dumps({
-            'status': 'claim_failed',
-            'reason': str(exc)
-        }))
+    except ValueError:
+        print(json.dumps({'status': 'claim_failed'}))
         raise
     if job is None:
         return {'status': 'idle'}
     # Validate before any Storage request; malformed trusted jobs lose their lease.
     try:
         validate_job(job)
-    except ValueError as exc:
-        print(json.dumps({
-        'status': 'invalid_job',
-        'reason': str(exc)
-        }))
+    except ValueError:
+        print(json.dumps({'status': 'invalid_job'}))
         raise
+    if seen is not None:
+        if job['job_id'] in seen:
+            return {'status': 'duplicate_claim'}
+        seen.add(job['job_id'])
     args = {'p_upload': job['job_id'], 'p_lease': job['lease_id']}
     try:
         with tempfile.TemporaryDirectory(prefix='pule-replay-') as tmp:
@@ -257,8 +258,7 @@ def run_once(api, processor=process_recording, r2=None):
     except Exception as exc:
         print(json.dumps({
             'status': 'processing_error',
-            'error_type': type(exc).__name__,
-            'reason': str(exc)[:300]
+            'error_type': type(exc).__name__
         }))
         try:
             api.rpc('fail_frame_replay_processing', args)
@@ -278,14 +278,54 @@ def verify_toolchain():
     subprocess.run(['ffprobe', '-version'], check=True, capture_output=True, timeout=10)
 
 
+def run_batch(api, *, r2=None, max_jobs=1, deadline, clock=time.monotonic):
+    started = clock()
+    seen = set()
+    counts = {'completed': 0, 'failed': 0, 'unconfirmed': 0}
+    stop = 'job_limit'
+    try:
+        for _ in range(max_jobs):
+            if deadline - clock() < CLAIM_RUNTIME_RESERVE_SECONDS:
+                stop = 'runtime_limit'
+                break
+            status = run_once(api, r2=r2, seen=seen)['status']
+            if status in ('idle', 'duplicate_claim'):
+                stop = 'queue_empty' if status == 'idle' else status
+                break
+            counts[status] += 1
+            print(json.dumps({'status': status}), flush=True)
+    except Exception:
+        stop = 'worker_error'
+        raise
+    finally:
+        summary = {'processed': sum(counts.values()), **counts, 'stop': stop,
+                   'elapsed_seconds': round(clock() - started, 2)}
+        print(json.dumps({'status': 'batch_summary', **summary}), flush=True)
+        if summary_path := os.environ.get('GITHUB_STEP_SUMMARY'):
+            with open(summary_path, 'a', encoding='utf-8') as report:
+                report.write(
+                    f"### Replay queue\n\n"
+                    f"- Processed {summary['processed']}\n"
+                    f"- Successful {counts['completed']}\n"
+                    f"- Failed {counts['failed']}\n"
+                    f"- Unconfirmed {counts['unconfirmed']}\n"
+                    f"- Stopped because {stop.replace('_', ' ')}\n"
+                    f"- Elapsed {summary['elapsed_seconds']} seconds\n"
+                )
+    return summary
+
+
 def main():
     parser = argparse.ArgumentParser(description='Claim and process trusted Pule replay jobs sequentially')
     parser.add_argument('--check', action='store_true', help='Validate local dependencies only; never claim or contact Supabase')
-    parser.add_argument('--max-jobs', type=int, default=1, help='Maximum jobs to claim (default: 1)')
+    parser.add_argument('--max-jobs', type=int, default=1, choices=range(1, MAX_BATCH_JOBS + 1),
+                        help='Maximum jobs to claim (default: 1)')
+    parser.add_argument('--runtime-seconds', type=int, default=MAX_BATCH_RUNTIME_SECONDS,
+                        help='Available processing time, capped at 35 minutes')
     args = parser.parse_args()
-    if args.max_jobs < 1:
-        parser.error('--max-jobs must be positive')
-    claim_deadline = time.monotonic() + ADDITIONAL_CLAIM_WINDOW_SECONDS
+    if not 0 <= args.runtime_seconds <= MAX_BATCH_RUNTIME_SECONDS:
+        parser.error('--runtime-seconds must be between 0 and 2100')
+    deadline = time.monotonic() + args.runtime_seconds
     stage = 'verify_toolchain'
     try:
         verify_toolchain()
@@ -301,17 +341,8 @@ def main():
             os.environ['SUPABASE_URL'],
             os.environ['SUPABASE_SERVICE_ROLE_KEY']
         )
-        had_failure = False
-        for index in range(args.max_jobs):
-            if index > 0 and time.monotonic() >= claim_deadline:
-                break
-            result = run_once(api, r2=r2)
-            print(json.dumps(result), flush=True)
-            if result['status'] == 'idle':
-                break
-            if result['status'] in ('failed', 'unconfirmed'):
-                had_failure = True
-        if had_failure:
+        summary = run_batch(api, r2=r2, max_jobs=args.max_jobs, deadline=deadline)
+        if summary['failed'] or summary['unconfirmed'] or summary['stop'] == 'duplicate_claim':
             raise SystemExit(1)
 
     except Exception as exc:
