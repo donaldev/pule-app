@@ -50,8 +50,7 @@ Open `http://127.0.0.1:5186/`. Chrome treats loopback as a secure context.
 
 ## Encoder and dependency
 
-[Mediabunny](https://mediabunny.dev/guide/converting-media-files) is pinned as one
-development dependency with type-only transitive dependencies. It handles both MP4
+[Mediabunny](https://mediabunny.dev/guide/converting-media-files) is a pinned dependency shared by the benchmark and the pilot-gated replay encoder. It handles both MP4
 demuxing and muxing, reads the source in bounded slices, and applies backpressure
 to the WebCodecs queues. The conversion closes decoded samples as it advances.
 [MP4Box.js](https://github.com/gpac/mp4box.js) can extract MP4 samples but would

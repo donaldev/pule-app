@@ -15,7 +15,7 @@ const encoderSource=(await source('features/replays/videoCompression.ts')).repla
 globalThis.scaleCompressionCorners=(await import(compile(encoderSource))).scaleCompressionCorners
 globalThis.geometry=geometry
 globalThis.uploadSizeRules={assertDirectReplayUploadSize,compressedReplayOutputLimit,directReplayUploadLimit}
-const uiPrelude=`const navigator={locks:{request:async(key,options,fn)=>fn({})}};const {displaySize,displayToSource,pointerToDisplay,sourceToDisplay,validCorners}=globalThis.geometry;
+const uiPrelude=`const document={hidden:false};const navigator={locks:{request:async(key,options,fn)=>fn({})}};const {displaySize,displayToSource,pointerToDisplay,sourceToDisplay,validCorners}=globalThis.geometry;
 const React={createElement:(type,props,...children)=>({type,props:props??{},children}),Fragment:'fragment'};
 const Modal='modal',RecordingCorners='RecordingCorners',RecordingFilePicker='RecordingFilePicker',RecordingProgress='RecordingProgress';
 const recordingSize=bytes=>(bytes/1e6).toFixed(2)+' MB';
@@ -33,7 +33,14 @@ const inspectRecordingTiming=async()=>({source:'mvhd',startMs:100000,durationMs:
 const videoSampleTypes=async()=>({audio:['mp4a']});
 const compressionSupport=()=>globalThis.h.encoderAvailable!==false;
 const {assertDirectReplayUploadSize,compressedReplayOutputLimit,directReplayUploadLimit}=globalThis.uploadSizeRules;
-const planCompression=()=>({audio:true,width:240,height:320});
+const planCompression=()=>{if(!compressionSupport())throw Error('Unsupported');return {audio:true,width:240,height:320}};
+const webCodecsAvailable=()=>!!globalThis.h.webCodecs;
+const probeWebCodecs=async()=>webCodecsAvailable();
+const compressWithWebCodecs=async(file,source,_audio,signal,progress)=>{
+  globalThis.h.calls.push(['webcodecs']);
+  if(globalThis.h.webCodecsFailure) throw Error('Encoder failed.');
+  return compressVideo(file,source.duration,{},signal,progress);
+};
 const scaleCompressionCorners=globalThis.scaleCompressionCorners;
 const compressVideo=async(_file,_duration,_plan,signal,progress)=>{
   globalThis.h.calls.push(['compress']);progress(0.25,12);
@@ -129,6 +136,54 @@ test('pilot hands off rotated corners and compressed bytes, and retries the same
   const queue=h.calls.find(c=>c[0]==='queue')
   assert.deepEqual(queue.slice(3),[[[10,20],[230,20],[230,300],[10,300]],240,320])
  } finally {URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke}
+})
+
+test('pilot prefers WebCodecs, even without MediaRecorder, and automatically uploads its output', async () => {
+ const render=component({pilot:true,status:{...response,expected_bytes:50}})
+ const restore=mockPreviewUrl()
+ try {
+  h.webCodecs=true
+  h.encoderAvailable=false
+  const tree=await selectOversized(render)
+  button(tree,'Upload & create replay').props.onClick();await tick()
+  assert.equal(h.calls[0][0],'webcodecs')
+  assert.deepEqual(h.calls.find(c=>c[0]==='transfer'),['transfer',50,'large_compressed.mp4'])
+  assert.ok(h.calls.some(c=>c[0]==='queue'))
+ } finally {restore()}
+})
+
+test('WebCodecs failure requires a new tap before compatibility compression and upload', async () => {
+ const render=component({pilot:true,status:{...response,expected_bytes:50}})
+ const restore=mockPreviewUrl()
+ try {
+  h.webCodecs=true
+  h.webCodecsFailure=true
+  const tree=await selectOversized(render)
+  button(tree,'Upload & create replay').props.onClick();await tick()
+  assert.deepEqual(h.calls,[['webcodecs']])
+  assert.match(JSON.stringify(render()),/compatibility mode/)
+  button(render(),'Retry upload').props.onClick();await tick()
+  assert.equal(h.calls.filter(c=>c[0]==='webcodecs').length,1)
+  assert.equal(h.calls.filter(c=>c[0]==='compress').length,1)
+  assert.equal(h.calls.filter(c=>c[0]==='queue').length,1)
+ } finally {restore()}
+})
+
+test('cancelling WebCodecs never arms or starts the compatibility fallback', async () => {
+ const render=component({pilot:true,status:{...response,expected_bytes:50}})
+ const restore=mockPreviewUrl()
+ try {
+  h.webCodecs=true
+  const tree=await selectOversized(render)
+  let release
+  h.holdCompression=new Promise(resolve=>{release=resolve})
+  button(tree,'Upload & create replay').props.onClick()
+  button(render(),'Cancel compression').props.onClick()
+  release();await tick()
+  assert.deepEqual(h.calls,[['webcodecs'],['compress']])
+  assert.equal(button(render(),'Retry upload'),undefined)
+  assert.match(JSON.stringify(render()),/Compression cancelled/)
+ } finally {restore()}
 })
 
 test('an oversized original requires compression even with the optional pilot flag off', async () => {

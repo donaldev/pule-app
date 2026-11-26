@@ -5,6 +5,7 @@ import { Modal } from '../../components/ui/Primitives'
 import type { ReplayUploadStatus, SavedFrame } from '../../data/remote/database.types'
 import { finalizeRecording, getFrameRecording, removeFrameReplay, getRecordingStatus, queueRecording, reserveRecording, transferRecording } from '../../data/remote/recordingService'
 import { displaySize, inspectRecording, inspectRecordingTiming, sourceToDisplay, validCorners, type Point, type RecordingGeometry, type RecordingTiming } from './recordingGeometry'
+import { compressWithWebCodecs, probeWebCodecs, webCodecsAvailable } from './webcodecsCompression'
 import { compressionSupport, compressVideo, planCompression, scaleCompressionCorners } from './videoCompression'
 import { RecordingFilePicker, RecordingProgress } from './RecordingFilePicker'
 import { RecordingCorners } from './RecordingCorners'
@@ -71,10 +72,14 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   const [duration, setDuration] = useState(0)
   const [compression, setCompression] = useState<{
     duration: number
-    plan: ReturnType<typeof planCompression>
+    source: { width: number; height: number; duration: number }
+    webCodecs: boolean
+    hasAudio: boolean
+    plan: ReturnType<typeof planCompression> | null
     timing: RecordingTiming | null
     losesAudio: boolean
   } | null | undefined>(undefined)
+  const [compatibleCompression, setCompatibleCompression] = useState(false)
   const [compressSelected, setCompressSelected] = useState(false)
   const [compressed, setCompressed] = useState<{
     file: File; geometry: RecordingGeometry; operation: string
@@ -88,7 +93,8 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   const requiresCompression = sourceProvider === 'r2' && !!file && file.size > directReplayUploadLimit
   const wantsCompression = requiresCompression || compressSelected
   const shouldCompress = wantsCompression && !compressed
-  const canPrepareCompression = (requiresCompression || import.meta.env?.VITE_REPLAY_COMPRESSION_PILOT === 'true')
+  const compressionPilot = import.meta.env?.VITE_REPLAY_COMPRESSION_PILOT === 'true'
+  const canPrepareCompression = (requiresCompression || compressionPilot)
     && !draft?.reservationRequested && !draft?.uploadId && !status
 
   useEffect(() => {
@@ -99,18 +105,19 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   }, [compressed])
   useEffect(() => {
     if (!canPrepareCompression || !file || !geometry || !duration) return
-    if (!compressionSupport()) { setCompression(null); return }
-    let active = true
-    const size = displaySize(geometry)
+    const controller = new AbortController()
+    const source = { ...displaySize(geometry), duration }
     void Promise.all([videoSampleTypes(file), initialTiming === undefined || file !== initialFile
-      ? inspectRecordingTiming(file) : Promise.resolve(initialTiming)]).then(([sampleTypes, timing]) => {
-      if (!active) return
+      ? inspectRecordingTiming(file) : Promise.resolve(initialTiming),
+    compressionPilot ? probeWebCodecs(file, source, controller.signal) : false]).then(([sampleTypes, timing, webCodecs]) => {
+      if (controller.signal.aborted) return
       const hasAudio = sampleTypes.audio.length > 0
-      const plan = planCompression({ ...size, duration }, hasAudio)
-      setCompression({ duration, plan, timing, losesAudio: hasAudio && !plan.audio })
-    }).catch(() => { if (active) setCompression(null) })
-    return () => { active = false }
-  }, [canPrepareCompression, file, geometry, duration, initialFile, initialTiming])
+      let plan: ReturnType<typeof planCompression> | null = null
+      try { plan = planCompression(source, hasAudio) } catch { /* WebCodecs can still be usable. */ }
+      setCompression(webCodecs || plan ? { duration, source, plan, webCodecs, hasAudio, timing, losesAudio: !!plan && hasAudio && !plan.audio } : null)
+    }).catch(() => { if (!controller.signal.aborted) setCompression(null) })
+    return () => controller.abort()
+  }, [canPrepareCompression, compressionPilot, file, geometry, duration, initialFile, initialTiming])
   useLayoutEffect(() => {
     alive.current = true
     return () => { alive.current = false; cancel.current?.abort(); transfer.current?.pause(); if (objectUrl.current) URL.revokeObjectURL(objectUrl.current) }
@@ -166,7 +173,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       const fixed = previous?.reservationRequested || previous?.uploadId
       const provider = fixed ? previous?.source_provider : import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 'r2' : 'supabase'
       if (provider === 'r2' && fixed && previous) assertDirectReplayUploadSize(previous.bytes)
-      if (provider === 'r2' && chosen.size > directReplayUploadLimit && !compressionSupport()) {
+      if (provider === 'r2' && chosen.size > directReplayUploadLimit && !compressionSupport() && !(compressionPilot && webCodecsAvailable())) {
         throw Error('Videos over 200 MB must be compressed before upload. This browser cannot compress MP4s. Choose a smaller compatible MP4.')
       }
       const g = await inspectRecording(chosen); ensureActive()
@@ -181,7 +188,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       setDraft(next)
       if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
       objectUrl.current = URL.createObjectURL(chosen)
-      setCompression(undefined); setDuration(0); setCompressSelected(false); setCompressed(null)
+      setCompression(undefined); setDuration(0); setCompressSelected(false); setCompatibleCompression(false); setCompressed(null)
       setPreview(objectUrl.current); setFile(chosen); setGeometry(g); setCornersConfirmed(false)
       setRawCorners(next?.corners ?? [])
     }))
@@ -216,13 +223,17 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
   async function compress(source: File) {
     if (!compression) throw Error('This video cannot be compressed. Choose a smaller compatible MP4.')
     const signal = cancel.current!.signal
+    const useWebCodecs = compression.webCodecs && !compatibleCompression
     try {
-      const result = await compressVideo(source, compression.duration, compression.plan, signal, (fraction, elapsedSeconds) => {
+      const progress = (fraction: number, elapsedSeconds: number) => {
         if (!alive.current || signal.aborted) return
         setCompressionElapsed(elapsedSeconds)
         setProgress(fraction >= 1 ? undefined : fraction * 100)
         if (fraction >= 1) setBusy('checking-output')
-      })
+      }
+      const result = useWebCodecs
+        ? await compressWithWebCodecs(source, compression.source, compression.hasAudio, signal, progress)
+        : await compressVideo(source, compression.duration, compression.plan!, signal, progress)
       ensureActive()
       if (!result.blob.size) throw Error('Compression produced an empty video.')
       if (result.blob.size > compressedReplayOutputLimit) throw Error('The compressed video exceeds the 200 MB compressed output limit.')
@@ -231,6 +242,10 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       setCompressed(selected)
       return selected
     } catch (reason) {
+      if (useWebCodecs && compression.plan && !signal.aborted && alive.current && !document.hidden) {
+        setCompatibleCompression(true)
+        throw Error('Compression could not finish. Try again in compatibility mode, or choose another video.')
+      }
       const message = signal.aborted ? 'Compression cancelled.' : reason instanceof Error ? reason.message : 'Compression failed.'
       throw Error(`${message} ${requiresCompression
         ? 'Try again or choose a smaller MP4.'
@@ -345,7 +360,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
               onChange={e => setCompressSelected(e.currentTarget.checked)} />
             Compress video before upload
           </label>}
-          {wantsCompression && !compressed && <p className="annotation">Keep Pule visible and your screen awake during compression.{compression.losesAudio && ' This browser will produce a silent video.'}</p>}
+          {wantsCompression && !compressed && <p className="annotation">Keep Pule visible and your screen awake during compression.{(!compression.webCodecs || compatibleCompression) && compression.losesAudio && ' This browser will produce a silent video.'}</p>}
         </>}
         {sourceProvider === 'r2' && !savedUpload && !compressed && compression !== null && <p className="annotation">Videos over 200 MB are compressed before upload.</p>}
         {wantsCompression && compressed && recoveryUrl && <div className="recording-recovery">
@@ -354,7 +369,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
         </div>}
         <button type="button" className="button" disabled={removing || !file || !valid || !!initial.error || !!oversizedResume || (shouldCompress && !compression)}
           onClick={() => void start()}>
-          {savedUpload ? 'Resume upload' : 'Upload & create replay'}
+          {savedUpload ? 'Resume upload' : compatibleCompression && shouldCompress ? 'Retry upload' : 'Upload & create replay'}
         </button>
       </>}
     </div>}

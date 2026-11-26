@@ -5,11 +5,12 @@ import {
 import { compressedReplayOutputLimit } from '../../data/replayUploadLimit.mjs'
 import type { StreamTargetChunk } from 'mediabunny'
 import { webCodecsVideoRate } from './webcodecsBudget.mjs'
-import { planCompressionBudget } from '../../features/replays/videoCompression'
+import { planCompressionBudget } from './videoCompression'
 
 export type WorkerRequest = {
   action: 'probe' | 'encode'
   file: File
+  diagnostics?: boolean
   source: { width: number; height: number; duration: number }
 }
 export type WorkerReply =
@@ -17,7 +18,7 @@ export type WorkerReply =
   | { type: 'progress'; fraction: number; bytes: number; processed: number }
   | { type: 'config'; config: Pick<VideoEncoderConfig, 'codec' | 'width' | 'height' | 'bitrate' | 'bitrateMode' | 'framerate' | 'latencyMode' | 'hardwareAcceleration'> }
   | { type: 'tracks'; videoBytes: number; audioBytes?: number }
-  | { type: 'output'; blob: Blob }
+  | { type: 'output'; blob: Blob; duration: number; width: number; height: number }
   | { type: 'error'; message: string }
 
 function send(reply: WorkerReply) {
@@ -25,7 +26,7 @@ function send(reply: WorkerReply) {
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
-  const { action, file, source } = event.data
+  const { action, file, source, diagnostics } = event.data
   const input = new Input({ source: new BlobSource(file, { maxCacheSize: 8 * 1024 * 1024 }), formats: [MP4] })
   let bytes = 0
   let processed = 0
@@ -109,7 +110,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       if (fraction < 1 && now - previousReport < 250) return
       previousReport = now
       send({ type: 'progress', fraction, bytes, processed })
-      send({ type: 'tracks', videoBytes })
+      if (diagnostics) send({ type: 'tracks', videoBytes })
     }
     // Conversion does not expose VideoSampleSource's encoder hooks. Observe
     // only this worker's real configuration and encoded chunks, after probing.
@@ -117,14 +118,14 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     self.VideoEncoder = class extends NativeEncoder {
       constructor(init: VideoEncoderInit) {
         super({ ...init, output(chunk, metadata) {
-          videoBytes += chunk.byteLength
+          if (diagnostics) videoBytes += chunk.byteLength
           init.output(chunk, metadata)
         } })
       }
 
       configure(config: VideoEncoderConfig) {
         const { codec, width, height, bitrate, bitrateMode, framerate, latencyMode, hardwareAcceleration } = config
-        send({ type: 'config', config: { codec, width, height, bitrate, bitrateMode, framerate, latencyMode, hardwareAcceleration } })
+        if (diagnostics) send({ type: 'config', config: { codec, width, height, bitrate, bitrateMode, framerate, latencyMode, hardwareAcceleration } })
         if (bitrateMode !== 'constant' || bitrate !== videoRate) {
           throw Error('The encoder did not receive the requested constant bitrate.')
         }
@@ -138,22 +139,28 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     const blob = new Blob(parts, { type: 'video/mp4' })
     const result = new Input({ source: new BlobSource(blob), formats: [MP4] })
     try {
-      const outputAudio = await result.getPrimaryAudioTrack()
-      let copiedBytes = 0
-      if (outputAudio) {
-        for await (const packet of new EncodedPacketSink(outputAudio).packets(undefined, undefined, { metadataOnly: true })) {
-          copiedBytes += packet.byteLength
-        }
+      const duration = await result.computeDuration()
+      if (!Number.isFinite(duration) || Math.abs(duration - source.duration) > 0.25) {
+        throw Error('The compressed video did not preserve the full recording duration.')
       }
-      send({ type: 'tracks', videoBytes, audioBytes: copiedBytes })
+      if (diagnostics) {
+        const outputAudio = await result.getPrimaryAudioTrack()
+        let copiedBytes = 0
+        if (outputAudio) {
+          for await (const packet of new EncodedPacketSink(outputAudio).packets(undefined, undefined, { metadataOnly: true })) {
+            copiedBytes += packet.byteLength
+          }
+        }
+        send({ type: 'tracks', videoBytes, audioBytes: copiedBytes })
+      }
+      send({ type: 'output', blob, duration, width: plan.width, height: plan.height })
     } finally {
       result.dispose()
     }
-    send({ type: 'output', blob })
   } catch (error) {
     if (action === 'encode') {
       send({ type: 'progress', fraction, bytes, processed })
-      send({ type: 'tracks', videoBytes })
+      if (diagnostics) send({ type: 'tracks', videoBytes })
     }
     send({ type: 'error', message: error instanceof Error ? error.message : 'WebCodecs failed.' })
   } finally {

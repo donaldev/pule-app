@@ -2,7 +2,7 @@ import { compressedReplayOutputLimit } from '../../data/replayUploadLimit.mjs'
 import { displaySize, inspectRecording } from '../../features/replays/recordingGeometry'
 import { videoSampleTypes } from '../../features/replays/videoSampleTypes'
 import { compressVideo, compressionSupport, planCompression } from '../../features/replays/videoCompression'
-import type { WorkerReply, WorkerRequest } from './webcodecs.worker'
+import type { WorkerReply, WorkerRequest } from '../../features/replays/webcodecs.worker'
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T
 const picker = element<HTMLInputElement>('file')
@@ -73,7 +73,7 @@ function workerRequest(request: WorkerRequest, signal: AbortSignal,
   return new Promise<Blob | undefined>((resolve, reject) => {
     signal.throwIfAborted()
     if (!window.isSecureContext || typeof Worker !== 'function') throw Error('WebCodecs benchmark requires a secure context and a dedicated worker.')
-    const worker = new Worker(new URL('./webcodecs.worker.ts', import.meta.url), { type: 'module' })
+    const worker = new Worker(new URL('../../features/replays/webcodecs.worker.ts', import.meta.url), { type: 'module' })
     function finish(error?: unknown, blob?: Blob) {
       signal.removeEventListener('abort', aborted)
       worker.terminate()
@@ -99,7 +99,7 @@ function workerRequest(request: WorkerRequest, signal: AbortSignal,
         case 'error': finish(Error(data.message)); break
       }
     }
-    worker.postMessage(request)
+    worker.postMessage({ ...request, diagnostics: true })
   })
 }
 

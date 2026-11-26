@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { webCodecsVideoRate } from '../../src/dev/replay-benchmark/webcodecsBudget.mjs'
+import { webCodecsVideoRate } from '../../src/features/replays/webcodecsBudget.mjs'
 
 test('Pixel-length CBR target leaves room for copied AAC and MP4 tables', () => {
   const duration = 524.64
