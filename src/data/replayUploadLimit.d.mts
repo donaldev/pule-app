@@ -1,2 +1,3 @@
-export const replayUploadLimit: number
-export function assertReplayUploadSize(bytes: number): void
+export const directReplayUploadLimit: number
+export const compressedReplayOutputLimit: number
+export function assertDirectReplayUploadSize(bytes: number): void

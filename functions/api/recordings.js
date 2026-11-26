@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { recordingR2, PART_BYTES, SOURCE_KEY } from '../../scripts/storage/r2Recording.mjs'
-import { replayUploadLimit } from '../../src/data/replayUploadLimit.mjs'
+import { directReplayUploadLimit } from '../../src/data/replayUploadLimit.mjs'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const SHA256 = /^[0-9a-f]{64}$/
 
@@ -37,14 +37,14 @@ export function recordingHandler(makeClient = createClient, makeR2 = recordingR2
       }
       if (body.action === 'reserve') {
         if (!UUID.test(body.operation) || !UUID.test(body.frame) || !SHA256.test(body.hash) || !Number.isSafeInteger(body.bytes) || body.bytes < 1) return response({ error: 'Invalid recording reservation' }, 400)
-        if (body.bytes > replayUploadLimit) return response({ error: 'Replay uploads must be 100 MB or less' }, 413)
+        if (body.bytes > directReplayUploadLimit) return response({ error: 'Direct replay uploads must be 200 MB or less' }, 413)
         makeR2(env) // Validate the existing storage configuration before reserving.
         return response(await rpc(actor, 'reserve_r2_frame_recording', { p_operation: body.operation, p_frame: body.frame, p_bytes: body.bytes, p_sha256: body.hash }))
       }
       if (!['state', 'part', 'complete'].includes(body.action) || !UUID.test(body.upload)) return response({ error: 'Invalid operation' }, 400)
       let u = await rpc(actor, 'get_r2_frame_recording', { p_upload: body.upload })
       if (u.source_provider !== 'r2' || !SOURCE_KEY.test(u.storage_path) || u.storage_path !== `${u.session_id}/${u.frame_id}/${u.upload_id}.mp4` || u.upload_id !== body.upload || !SHA256.test(u.source_sha256) || !Number.isSafeInteger(u.expected_bytes) || u.expected_bytes < 1) throw Error('Invalid source identity')
-      if (u.expected_bytes > replayUploadLimit) return response({ error: 'Replay uploads must be 100 MB or less' }, 413)
+      if (u.expected_bytes > directReplayUploadLimit) return response({ error: 'Direct replay uploads must be 200 MB or less' }, 413)
       if (u.status === 'committed') return response(body.action === 'complete' ? u : { status: u, completed: true, parts: [], partBytes: PART_BYTES })
       const r2 = makeR2(env)
       const head = await r2.head(u.storage_path)

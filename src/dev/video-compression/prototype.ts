@@ -1,4 +1,4 @@
-import { replayUploadLimit } from '../../data/replayUploadLimit.mjs'
+import { compressedReplayOutputLimit } from '../../data/replayUploadLimit.mjs'
 import { inspectRecordingTiming, type RecordingTiming } from '../../features/replays/recordingGeometry'
 import { audioBitrate, compressionSupport, planCompression, compressVideo, type CompressionPlan } from '../../features/replays/videoCompression'
 import { videoSampleTypes } from '../../features/replays/videoSampleTypes'
@@ -56,7 +56,7 @@ function setup() {
   const output = document.querySelector<HTMLElement>('#output')!
   const preview = document.querySelector<HTMLVideoElement>('#preview')!
   const download = document.querySelector<HTMLAnchorElement>('#download')!
-  const budget: [string, string] = ['Maximum output', mb(replayUploadLimit)]
+  const budget: [string, string] = ['Maximum output', mb(compressedReplayOutputLimit)]
   const video = document.createElement('video')
   video.playsInline = true
   video.preload = 'auto'
@@ -161,10 +161,10 @@ function setup() {
       details(output, [['Size', mb(blob.size)], ['Size reduction', `${(100 * (1 - blob.size / input.file.size)).toFixed(1)}%`],
         ['Resolution', `${geometry.width} × ${geometry.height}`],
         ['Format', `MP4 · H.264 (${sampleTypes.video[0]})${target.audio ? ' · AAC (mp4a)' : ''}`],
-        ['100 MB target', blob.size <= replayUploadLimit ? 'Met' : 'Exceeded'], ['Compression time', seconds(elapsed)]])
+        ['100 MB target', blob.size <= compressedReplayOutputLimit ? 'Met' : 'Exceeded'], ['Compression time', seconds(elapsed)]])
       result.hidden = false
       progress.value = 1
-      status.textContent = blob.size <= replayUploadLimit ? 'Compression complete.' : 'Compression complete. The output exceeds 100 MB.'
+      status.textContent = blob.size <= compressedReplayOutputLimit ? 'Compression complete.' : 'Compression complete. The output exceeds 100 MB.'
     } catch (error) {
       status.textContent = controller.signal.aborted ? 'Compression cancelled.' : error instanceof Error ? error.message : 'Compression failed.'
     } finally {

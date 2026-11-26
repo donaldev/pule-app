@@ -1,4 +1,4 @@
-import { assertReplayUploadSize } from '../replayUploadLimit.mjs'
+import { assertDirectReplayUploadSize } from '../replayUploadLimit.mjs'
 import { actorAuthorization, getSupabase } from './supabase'
 import type { ReplayUploadStatus } from './database.types'
 
@@ -8,7 +8,7 @@ export async function r2Command(userId: string, body: Record<string, unknown>): 
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/api/recordings') throw Error('Invalid recording broker configuration.')
   const authorization = await actorAuthorization(userId)
   const response = await fetch(url, { method: 'POST', redirect: 'error', credentials: 'omit', headers: { Authorization: authorization, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) })
-  if (response.status === 413) throw Error('Pule accepts replay uploads up to 100 MB. Choose a smaller MP4.')
+  if (response.status === 413) throw Error('Direct replay uploads are limited to 200 MB. Compress this video or choose a smaller MP4.')
   if (!response.ok) throw Error('Recording request could not be confirmed. Keep the same file and check status before retrying.')
   const result: unknown = await response.json()
   await actorAuthorization(userId)
@@ -20,8 +20,8 @@ export function transferR2Recording(file: File, userId: string, reservation: Rep
   return {
     pause,
     start: async () => {
-      assertReplayUploadSize(file.size)
-      assertReplayUploadSize(reservation.expected_bytes)
+      assertDirectReplayUploadSize(file.size)
+      assertDirectReplayUploadSize(reservation.expected_bytes)
       if (file.size !== reservation.expected_bytes) throw Error('The selected recording does not match the saved upload.')
       const { data } = getSupabase().auth.onAuthStateChange((_event, session) => { if (!session || session.user.id !== userId) pause() })
       unsubscribe = () => data.subscription.unsubscribe()

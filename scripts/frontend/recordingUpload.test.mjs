@@ -1,4 +1,4 @@
-import { assertReplayUploadSize, replayUploadLimit } from '../../src/data/replayUploadLimit.mjs'
+import { assertDirectReplayUploadSize, directReplayUploadLimit } from '../../src/data/replayUploadLimit.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
@@ -69,8 +69,8 @@ test('unavailable storage and malformed recovery block rather than discard',()=>
 
 let service=await source('data/remote/recordingService.ts')
 service=service.replace(/^import .*$/gm,'').replace('import.meta.env.VITE_SUPABASE_URL',"'https://test.supabase.co'")
-globalThis.assertReplayUploadSize=assertReplayUploadSize
-const prelude=`const assertReplayUploadSize=globalThis.assertReplayUploadSize;const r2RecordingEnabled=()=>false;const actorAuthorization=async uid=>{if(uid!==globalThis.s.actor)throw Error('Wrong actor');return 'Bearer caller'};
+globalThis.assertDirectReplayUploadSize=assertDirectReplayUploadSize
+const prelude=`const assertDirectReplayUploadSize=globalThis.assertDirectReplayUploadSize;const r2RecordingEnabled=()=>false;const actorAuthorization=async uid=>{if(uid!==globalThis.s.actor)throw Error('Wrong actor');return 'Bearer caller'};
 const getSupabase=()=>({auth:{onAuthStateChange:callback=>{globalThis.s.authChange=callback;return {data:{subscription:{unsubscribe(){}}}}}},rpc:(name,args)=>{globalThis.s.calls.push({name,args});const q={setHeader:(key,value)=>{globalThis.s.header={key,value};return q},retry:value=>{globalThis.s.retry=value;return q},abortSignal:async()=>({data:globalThis.s.response,error:globalThis.s.error})};return q}});
 class Upload{constructor(file,options){this.options=options;globalThis.s.upload=this}async findPreviousUploads(){return []}start(){globalThis.s.started=true}async abort(){globalThis.s.aborted=true}};`
 const api=await import(compile(prelude+service))
@@ -84,9 +84,9 @@ test('reservation/finalization/corner submission use actor-bound existing RPCs a
 })
 test('client refuses oversized R2 reservations and queue submissions before any request',async()=>{
  setup()
- const bytes=replayUploadLimit+1
- await assert.rejects(api.reserveRecording(actor,frame,id,bytes,'a'.repeat(64),'r2'),/100 MB/)
- await assert.rejects(api.queueRecording(actor,{...response,source_provider:'r2',expected_bytes:bytes},[[10,10],[630,10],[630,470],[10,470]],640,480),/100 MB/)
+ const bytes=directReplayUploadLimit+1
+ await assert.rejects(api.reserveRecording(actor,frame,id,bytes,'a'.repeat(64),'r2'),/200 MB/)
+ await assert.rejects(api.queueRecording(actor,{...response,source_provider:'r2',expected_bytes:bytes},[[10,10],[630,10],[630,470],[10,470]],640,480),/200 MB/)
  assert.equal(s.calls.length,0)
 })
 test('a pre-processing backend response cannot redirect sources into the replay bucket',()=>{

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
-import { assertReplayUploadSize, replayUploadLimit } from '../../src/data/replayUploadLimit.mjs'
+import { assertDirectReplayUploadSize, compressedReplayOutputLimit, directReplayUploadLimit } from '../../src/data/replayUploadLimit.mjs'
 const compile=source=>'data:text/javascript;base64,'+Buffer.from(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.React}}).outputText).toString('base64')
 const source=async path=>readFile(new URL('../../src/'+path,import.meta.url),'utf8')
 const geometry=await import(compile(await source('features/replays/recordingGeometry.ts')))
@@ -14,7 +14,7 @@ ui=ui.replaceAll('import.meta.env.VITE_RECORDING_UPLOAD_API_URL',"'https://test/
 const encoderSource=(await source('features/replays/videoCompression.ts')).replace(/^import .*$/gm,'')
 globalThis.scaleCompressionCorners=(await import(compile(encoderSource))).scaleCompressionCorners
 globalThis.geometry=geometry
-globalThis.uploadSizeRules={assertReplayUploadSize,replayUploadLimit}
+globalThis.uploadSizeRules={assertDirectReplayUploadSize,compressedReplayOutputLimit,directReplayUploadLimit}
 const uiPrelude=`const navigator={locks:{request:async(key,options,fn)=>fn({})}};const {displaySize,displayToSource,pointerToDisplay,sourceToDisplay,validCorners}=globalThis.geometry;
 const React={createElement:(type,props,...children)=>({type,props:props??{},children}),Fragment:'fragment'};
 const Modal='modal',RecordingCorners='RecordingCorners',RecordingFilePicker='RecordingFilePicker',RecordingProgress='RecordingProgress';
@@ -32,14 +32,16 @@ const inspectRecording=async()=>{await globalThis.h.holdDetails;return globalThi
 const inspectRecordingTiming=async()=>({source:'mvhd',startMs:100000,durationMs:100000,reliability:'medium'});
 const videoSampleTypes=async()=>({audio:['mp4a']});
 const compressionSupport=()=>globalThis.h.encoderAvailable!==false;
-const {assertReplayUploadSize,replayUploadLimit}=globalThis.uploadSizeRules;
+const {assertDirectReplayUploadSize,compressedReplayOutputLimit,directReplayUploadLimit}=globalThis.uploadSizeRules;
 const planCompression=()=>({audio:true,width:240,height:320});
 const scaleCompressionCorners=globalThis.scaleCompressionCorners;
 const compressVideo=async(_file,_duration,_plan,signal,progress)=>{
   globalThis.h.calls.push(['compress']);progress(1,100);
   if(globalThis.h.compressionFailure==='cancel') await new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));
   if(globalThis.h.compressionFailure==='error') throw Error('Encoding failed.');
-  const blob=globalThis.h.compressionFailure==='oversized' ? {size:replayUploadLimit+1} : new Blob([new Uint8Array(50)],{type:'video/mp4'});
+  const size=globalThis.h.compressedBytes ?? 50;
+  const outputChunk=new Blob([new Uint8Array(Math.min(size,1_000_000))]);
+  const blob=globalThis.h.compressionFailure==='oversized' ? {size:compressedReplayOutputLimit+1} : new Blob(Array(size/outputChunk.size).fill(outputChunk),{type:'video/mp4'});
   return {blob,geometry:{width:240,height:320,rotation:0}};
 };
 const reserveRecording=async(...args)=>{globalThis.h.calls.push(['reserve',...args]);return globalThis.h.response};
@@ -141,6 +143,43 @@ test('an oversized original requires compression even with the optional pilot fl
  } finally {restore()}
 })
 
+test('a valid original at exactly 200 MB uploads directly', async () => {
+ const render=component({status:{...response,expected_bytes:directReplayUploadLimit}})
+ const restore=mockPreviewUrl()
+ try {
+  const picker=find(render(),n=>n.type==='RecordingFilePicker')
+  picker.props.onChoose({name:'original.mp4',type:'video/mp4',size:directReplayUploadLimit})
+  await tick()
+  const tree=mark(render,[[20,20],[620,20],[620,460],[20,460]])
+  assert.equal(button(tree,'Compress video'),undefined)
+  button(tree,'Upload recording').props.onClick();await tick()
+  assert.deepEqual(h.calls.find(c=>c[0]==='transfer'),['transfer',200_000_000,'original.mp4'])
+  assert.ok(h.calls.some(c=>c[0]==='queue'))
+ } finally {restore()}
+})
+
+test('a 100 MB compressed result can upload, but one more byte cannot', async () => {
+ const restore=mockPreviewUrl()
+ try {
+  for(const oversized of [false,true]) {
+   const render=component({status:{...response,expected_bytes:compressedReplayOutputLimit}})
+   const tree=await selectOversized(render)
+   h.compressedBytes=compressedReplayOutputLimit
+   if(oversized)h.compressionFailure='oversized'
+   button(tree,'Compress video').props.onClick();await tick()
+   const result=render()
+   if(oversized) {
+    assert.match(JSON.stringify(result),/100 MB compressed output limit/)
+    assert.equal(button(result,'Upload recording'),undefined)
+    assert.equal(h.calls.some(c=>['reserve','transfer'].includes(c[0])),false)
+   } else {
+    button(result,'Upload recording').props.onClick();await tick()
+    assert.deepEqual(h.calls.find(c=>c[0]==='transfer'),['transfer',100_000_000,'large_compressed.mp4'])
+   }
+  }
+ } finally {restore()}
+})
+
 test('failed, cancelled, unsupported and oversized compression cannot fall back to the oversized original', async () => {
  const restore=mockPreviewUrl()
  try {
@@ -173,15 +212,15 @@ test('failed, cancelled, unsupported and oversized compression cannot fall back 
 })
 
 test('an existing oversized R2 reservation is blocked before selecting a file or resuming', async () => {
- const render=component({status:{...response,expected_bytes:replayUploadLimit+1},initial:{
-  source_provider:'r2',bytes:replayUploadLimit+1,reservationRequested:true,uploadId:id,
+ const render=component({status:{...response,expected_bytes:directReplayUploadLimit+1},initial:{
+  source_provider:'r2',bytes:directReplayUploadLimit+1,reservationRequested:true,uploadId:id,
  }})
  render();for(const effect of h.effects) effect()
  await tick()
  const tree=render()
  assert.equal(find(tree,n=>n.type==='RecordingFilePicker'),undefined)
  assert.equal(button(tree,'Upload recording'),undefined)
- assert.match(JSON.stringify(tree),/saved upload is too large/)
+ assert.match(JSON.stringify(tree),/saved upload exceeds the 200 MB/)
  assert.equal(h.calls.some(c=>['reserve','transfer','finalize','queue'].includes(c[0])),false)
 })
 
@@ -193,7 +232,7 @@ function mockPreviewUrl() {
 
 async function selectOversized(render) {
  const picker=find(render(),n=>n.type==='RecordingFilePicker')
- picker.props.onChoose({name:'large.mp4',type:'video/mp4',size:replayUploadLimit+1})
+ picker.props.onChoose({name:'large.mp4',type:'video/mp4',size:directReplayUploadLimit+1})
  await tick()
  mark(render,[[20,20],[620,20],[620,460],[20,460]])
  for(const effect of h.effects) effect()

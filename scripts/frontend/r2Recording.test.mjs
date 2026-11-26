@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { assertReplayUploadSize, replayUploadLimit } from '../../src/data/replayUploadLimit.mjs'
+import { assertDirectReplayUploadSize, directReplayUploadLimit } from '../../src/data/replayUploadLimit.mjs'
 import { recordingHandler } from '../../functions/api/recordings.js'
 import { recordingR2, PART_BYTES } from '../storage/r2Recording.mjs'
 import { runReplayCleanup } from '../storage/cleanup-frame-replays.mjs'
@@ -44,17 +44,17 @@ test('broker rejects untrusted origins, invalid accounts and authorization loss 
     assert.ok(r.status >= 400); assert.equal(h.calls.filter(x => x.r2).length, 0)
   }
 })
-test('the broker accepts exactly 100 MB and rejects larger reservations before the RPC', async () => {
+test('the broker accepts exactly 200 MB and rejects larger reservations before the RPC', async () => {
   const h = setup()
-  assert.equal((await h.send({ action: 'reserve', operation: upload, frame, bytes: replayUploadLimit, hash })).status, 200)
+  assert.equal((await h.send({ action: 'reserve', operation: upload, frame, bytes: directReplayUploadLimit, hash })).status, 200)
   assert.equal(h.calls[0].token, 'public')
-  assert.equal(h.calls[0].args.p_bytes, replayUploadLimit)
-  assert.equal((await h.send({ action: 'reserve', operation: upload, frame, bytes: replayUploadLimit + 1, hash })).status, 413)
+  assert.equal(h.calls[0].args.p_bytes, directReplayUploadLimit)
+  assert.equal((await h.send({ action: 'reserve', operation: upload, frame, bytes: directReplayUploadLimit + 1, hash })).status, 413)
   assert.equal(h.calls.length, 1)
 })
 test('oversized legacy sessions cannot list or sign parts or complete through the broker', async () => {
   const h = setup()
-  h.u.expected_bytes = replayUploadLimit + 1
+  h.u.expected_bytes = directReplayUploadLimit + 1
   for (const action of ['state', 'part', 'complete']) {
     assert.equal((await h.send({ action, upload, part: 1 })).status, 413)
   }
@@ -138,8 +138,8 @@ import ts from 'typescript'
 import { readFile } from 'node:fs/promises'
 let browserSource = await readFile(new URL('../../src/data/remote/r2Recording.ts', import.meta.url), 'utf8')
 browserSource = browserSource.replace(/^import .*$/gm, '').replaceAll('import.meta.env.VITE_RECORDING_UPLOAD_API_URL', "'https://test.example/api/recordings'")
-globalThis.assertReplayUploadSize=assertReplayUploadSize
-const prelude = `const assertReplayUploadSize=globalThis.assertReplayUploadSize;const actorAuthorization=async()=>{globalThis.browserCalls.auth++;return 'Bearer caller'};const getSupabase=()=>({auth:{onAuthStateChange:fn=>{globalThis.browserCalls.accountChange=fn;return {data:{subscription:{unsubscribe(){}}}}}}});`
+globalThis.assertDirectReplayUploadSize=assertDirectReplayUploadSize
+const prelude = `const assertDirectReplayUploadSize=globalThis.assertDirectReplayUploadSize;const actorAuthorization=async()=>{globalThis.browserCalls.auth++;return 'Bearer caller'};const getSupabase=()=>({auth:{onAuthStateChange:fn=>{globalThis.browserCalls.accountChange=fn;return {data:{subscription:{unsubscribe(){}}}}}}});`
 const compiled = ts.transpileModule(prelude+browserSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText
 const browser = await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'))
 const signed = n => `https://${'a'.repeat(32)}.r2.cloudflarestorage.com/pule-frame-recordings/${key}?uploadId=id&partNumber=${n}&X-Amz-Expires=120&X-Amz-SignedHeaders=content-length%3Bhost&X-Amz-Signature=example`
@@ -186,8 +186,29 @@ test('verified terminal source corruption retires only that attempt through the 
 
 test('client transfer rejects an oversized file, reservation, or size mismatch before contacting the broker', async () => {
  globalThis.browserCalls={auth:0}
- for(const [size,expected_bytes] of [[replayUploadLimit+1,10],[10,replayUploadLimit+1],[10,20]]) {
-   await assert.rejects(browser.transferR2Recording({size},actor,{upload_id:upload,expected_bytes},()=>{}).start(),/100 MB|does not match/)
+ for(const [size,expected_bytes] of [[directReplayUploadLimit+1,10],[10,directReplayUploadLimit+1],[10,20]]) {
+   await assert.rejects(browser.transferR2Recording({size},actor,{upload_id:upload,expected_bytes},()=>{}).start(),/200 MB|does not match/)
  }
  assert.deepEqual(globalThis.browserCalls,{auth:0})
+})
+
+test('client sends exactly 200 MB in twelve parts without changing part size', async () => {
+ const original=globalThis.fetch
+ globalThis.browserCalls={auth:0}
+ const bytes=200_000_000
+ const file={size:bytes,slice:(start,end)=>({size:end-start})}
+ const puts=[]
+ globalThis.fetch=async(url,options)=>{
+  if(String(url).startsWith('https://test.example')){
+   const request=JSON.parse(options.body)
+   if(request.action==='state') return Response.json({completed:false,parts:[],partBytes:PART_BYTES})
+   return Response.json({url:signed(request.part),bytes:Math.min(PART_BYTES,bytes-(request.part-1)*PART_BYTES)})
+  }
+  puts.push(options.body.size)
+  return new Response(null,{status:200})
+ }
+ try {
+  await browser.transferR2Recording(file,actor,{upload_id:upload,storage_path:key,expected_bytes:bytes},()=>{}).start()
+  assert.deepEqual(puts,[...Array(11).fill(16_777_216),15_450_624])
+ } finally {globalThis.fetch=original}
 })

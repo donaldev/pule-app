@@ -1,4 +1,4 @@
-import { assertReplayUploadSize } from '../replayUploadLimit.mjs'
+import { assertDirectReplayUploadSize } from '../replayUploadLimit.mjs'
 import { r2Command, r2RecordingEnabled, transferR2Recording } from './r2Recording'
 import { Upload } from 'tus-js-client'
 import { actorAuthorization, getSupabase } from './supabase'
@@ -30,7 +30,7 @@ async function command<Name extends Commands>(userId: string, name: Name, args: 
 }
 export async function reserveRecording(userId: string, frameId: string, operation: string, bytes: number, hash?: string, provider?: string) {
   if (provider === 'r2' || !provider && r2RecordingEnabled()) {
-    assertReplayUploadSize(bytes)
+    assertDirectReplayUploadSize(bytes)
     return validateUploadStatus(await r2Command(userId, { action: 'reserve', operation, frame: frameId, bytes, hash }))
   }
   return command(userId, 'reserve_frame_replay_upload', { p_operation: operation, p_frame: frameId, p_bytes: bytes, p_content_type: 'video/mp4' })
@@ -38,7 +38,7 @@ export async function reserveRecording(userId: string, frameId: string, operatio
 export const finalizeRecording = (userId: string, id: string, provider?: string) => provider === 'r2' ? r2Command(userId, { action: 'complete', upload: id }).then(validateUploadStatus) : command(userId, 'finalize_frame_replay_upload', { p_upload: id })
 export const getRecordingStatus = (userId: string, id: string) => command(userId, 'get_my_frame_replay_upload', { p_upload: id })
 export async function queueRecording(userId: string, recording: ReplayUploadStatus, corners: Point[], width: number, height: number) {
-  if (recording.source_provider === 'r2') assertReplayUploadSize(recording.expected_bytes)
+  if (recording.source_provider === 'r2') assertDirectReplayUploadSize(recording.expected_bytes)
   return command(userId, 'queue_frame_replay_processing', { p_upload: recording.upload_id, p_corners: corners, p_width: width, p_height: height })
 }
 export function recordingEndpoint(project: string) {

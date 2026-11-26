@@ -1,8 +1,7 @@
-import { replayUploadLimit } from '../../data/replayUploadLimit.mjs'
+import { compressedReplayOutputLimit } from '../../data/replayUploadLimit.mjs'
 import { inspectRecording, type Point } from './recordingGeometry'
 import { videoSampleTypes } from './videoSampleTypes'
 
-const MAX_HELD_BYTES = 110_000_000
 export const audioBitrate = 128_000
 const MP4_WITH_AUDIO = 'video/mp4;codecs=avc1,mp4a.40.2'
 const MP4_VIDEO_ONLY = 'video/mp4;codecs=avc1'
@@ -29,7 +28,7 @@ export type CompressionPlan = { width: number; height: number; videoRate: number
 
 function measurePlan(source: { width: number; height: number; duration: number }, audio: boolean, mime: string): CompressionPlan {
   // Reserve 2% for container overhead and 10% for bitrate variation.
-  const videoRate = Math.min(8_000_000, Math.floor(replayUploadLimit * 0.88 * 8 / source.duration) - (audio ? audioBitrate : 0))
+  const videoRate = Math.min(8_000_000, Math.floor(compressedReplayOutputLimit * 0.88 * 8 / source.duration) - (audio ? audioBitrate : 0))
   if (videoRate < 350_000) throw Error('The recording is too long for a useful result within the 100 MB budget.')
   const shortEdge = videoRate >= 2_000_000 ? 1080 : 720
   const scale = Math.min(1, shortEdge / Math.min(source.width, source.height), shortEdge * 16 / 9 / Math.max(source.width, source.height))
@@ -105,8 +104,8 @@ function record(video: HTMLVideoElement, settings: CompressionPlan, signal: Abor
       recorder.addEventListener('dataavailable', event => {
         if (!event.data.size) return
         bytes += event.data.size
-        if (bytes > MAX_HELD_BYTES) {
-          finish(Error(`Partial output reached ${(bytes / 1e6).toFixed(2)} MB, exceeding the 100 MB target. Compression stopped to limit memory use.`))
+        if (bytes > compressedReplayOutputLimit) {
+          finish(Error('The compressed recording exceeds the 100 MB compressed output limit.'))
           return
         }
         chunks.push(event.data)
