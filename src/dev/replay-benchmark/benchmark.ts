@@ -65,7 +65,11 @@ function metadata(blob: Blob, signal: AbortSignal) {
   })
 }
 
-function workerRequest(request: WorkerRequest, signal: AbortSignal, onProgress?: (fraction: number, bytes: number, processed: number) => void) {
+type RateDiagnostic = Extract<WorkerReply, { type: 'capabilities' | 'config' | 'tracks' }>
+
+function workerRequest(request: WorkerRequest, signal: AbortSignal,
+  onProgress?: (fraction: number, bytes: number, processed: number) => void,
+  onRateDiagnostic?: (report: RateDiagnostic) => void) {
   return new Promise<Blob | undefined>((resolve, reject) => {
     signal.throwIfAborted()
     if (!window.isSecureContext || typeof Worker !== 'function') throw Error('WebCodecs benchmark requires a secure context and a dedicated worker.')
@@ -85,9 +89,12 @@ function workerRequest(request: WorkerRequest, signal: AbortSignal, onProgress?:
           supported = data.supported
           experimentalRate = data.videoRate
           capabilities.textContent = `Decoder ${data.decoder} · Encoder ${data.encoder} · Audio ${data.audio}. Hardware use is unverified.`
+          onRateDiagnostic?.(data)
           if (request.action === 'probe') finish()
           break
         case 'progress': onProgress?.(data.fraction, data.bytes, data.processed); break
+        case 'config':
+        case 'tracks': onRateDiagnostic?.(data); break
         case 'output': finish(undefined, data.blob); break
         case 'error': finish(Error(data.message)); break
       }
@@ -184,12 +191,26 @@ async function run(method: Method) {
   let processed = 0
   let finalBytes: number | undefined
   let finishedIn: number | undefined
+  let encoderConfig: Extract<WorkerReply, { type: 'config' }>['config'] | undefined
+  let sourceAudioBytes: number | undefined
+  let encodedVideoBytes: number | undefined
+  let copiedAudioBytes: number | undefined
   let resultRows: [string, string][] = []
   const diagnostics = (time: number): [string, string][] => {
     const bitrate = method === 'baseline' ? plan?.videoRate : experimentalRate
     return [
       ['Requested video bitrate', bitrate === undefined ? 'Unavailable' : `${bitrate.toLocaleString()} bps`],
       ['Actual output bytes', bytes.toLocaleString()],
+      ...(method === 'experimental' ? [
+        ['Encoder configuration', encoderConfig
+          ? `${encoderConfig.codec} · ${encoderConfig.width} × ${encoderConfig.height} · ${encoderConfig.framerate ?? '?'} fps · ${encoderConfig.bitrateMode ?? 'default'} · ${encoderConfig.bitrate?.toLocaleString() ?? '?'} bps · ${encoderConfig.hardwareAcceleration ?? 'default'} · ${encoderConfig.latencyMode ?? 'default'} latency`
+          : 'Awaiting configuration'],
+        ['Encoded video bytes', encodedVideoBytes?.toLocaleString() ?? '—'],
+        ['Observed video bitrate', encodedVideoBytes !== undefined && processed > 0
+          ? `${Math.round(encodedVideoBytes * 8 / processed).toLocaleString()} bps` : '—'],
+        ['Copied audio bytes', copiedAudioBytes?.toLocaleString() ?? 'Available after finalization'],
+        ['Source AAC bytes reserved', sourceAudioBytes?.toLocaleString() ?? '—'],
+      ] as [string, string][] : []),
       ['Source processed', `${seconds(processed)} / ${seconds(duration)}`],
       ['Elapsed', seconds(time)],
       ['Speed', time > 0 && processed > 0 ? `${(processed / time).toFixed(2)}× real time` : '—'],
@@ -224,6 +245,13 @@ async function run(method: Method) {
         bytes = outputBytes
         processed = Math.max(processed, Math.min(duration, sourceSeconds))
         advance(fraction)
+      }, report => {
+        if (report.type === 'config') encoderConfig = report.config
+        else if (report.type === 'capabilities') sourceAudioBytes = report.audioBudget
+        else {
+          encodedVideoBytes = report.videoBytes
+          copiedAudioBytes = report.audioBytes
+        }
       })
     signal.throwIfAborted()
     finishedIn = (performance.now() - started) / 1000

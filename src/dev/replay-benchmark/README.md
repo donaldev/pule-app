@@ -59,14 +59,25 @@ require more glue for transcode, timestamps and writing. The standalone
 [mp4-muxer](https://github.com/Vanilagy/mp4-muxer/blob/main/MIGRATION-GUIDE.md) is
 deprecated and only covers writing.
 
-Both paths use the same bitrate budgeting rules. The MediaRecorder plan reserves
-AAC at 160 kbps for its 128 kbps request. WebCodecs reserves the actual number of
-AAC bytes using metadata-only packet reads, so its requested video bitrate can
-differ. Plans aim for about 180 MB after allowing for MP4 overhead and video
-bitrate overshoot. Encoder settings are targets and smaller valid output is kept. It re-encodes video as upright H.264 at 30 fps, sampling the source
-presentation timeline onto a constant-rate grid because the replay worker uses
-frame index divided by FPS for shot timing. This retains the overall timeline
-with frame-grid rounding. The primary AAC track is copied. Unsupported audio
+MediaRecorder keeps its production budget. WebCodecs keeps the previous
+output dimensions and 30 fps, but requests constant bitrate using a 175 MB
+model, minus the actual AAC packet bytes and a 4 MB MP4 allowance. The hard
+limit remains 200 MB. The original Pixel run wrote 200.21 MB after 476.91 s of
+source time, around 3.36 Mbps total. Before this experiment Mediabunny passed
+the requested bitrate through with variable rate control. Android documents a
+quality floor in that mode that can produce a higher bitrate. The run did
+not expose a native driver bitrate or prove that the floor caused the overshoot.
+[Android MediaCodec rate control](https://developer.android.com/reference/android/media/MediaCodec#minimum-quality-floor-for-video-encoding)
+
+The result shows the configuration submitted to `VideoEncoder.configure()`,
+the observed encoded video bytes, and the source AAC packet bytes reserved.
+Completed MP4s also show the exact copied audio payload. The configured mode
+and bitrate are browser settings. Actual throughput, rate control and
+hardware use can vary by device.
+
+The worker samples the source presentation timeline onto a constant-rate grid
+because replay shot timing uses frame index divided by FPS. This retains the
+overall timeline with frame-grid rounding. The primary AAC track is copied. Unsupported audio
 is rejected instead of being dropped. The same source-to-display transform and
 output scaling used by replay compression apply to the baked orientation.
 
