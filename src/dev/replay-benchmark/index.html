@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; worker-src 'self'; media-src blob:; img-src 'self'">
+    <title>Pule · Compression benchmark</title>
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body>
+    <main>
+      <header><h1>Compression benchmark</h1><p>Compare two encoders on the same MP4. Files stay on this device.</p></header>
+      <section aria-labelledby="source-title">
+        <h2 id="source-title">Source recording</h2>
+        <input id="file" type="file" accept="video/mp4,.mp4" tabindex="-1" aria-label="Choose MP4">
+        <button class="primary" id="choose">Choose MP4</button>
+        <dl id="source"></dl>
+        <p id="capabilities" role="status">Choose a video to check codec support.</p>
+      </section>
+      <section aria-labelledby="run-title">
+        <h2 id="run-title">Run benchmark</h2>
+        <p>Keep this page visible and the screen awake. Maximum output is 100 MB.</p>
+        <div class="actions">
+          <button class="primary" id="baseline" disabled>Run MediaRecorder</button>
+          <button class="primary" id="experimental" disabled>Run WebCodecs</button>
+          <button id="cancel" disabled>Cancel</button>
+        </div>
+        <progress id="progress" max="1" aria-label="Compression progress" hidden></progress>
+        <p id="status" role="status"></p>
+        <output id="elapsed" aria-label="Elapsed time"></output>
+      </section>
+      <div class="results" aria-label="Benchmarks">
+        <section>
+          <h2>MediaRecorder</h2>
+          <p id="baseline-message">Awaiting a run.</p>
+          <dl id="baseline-result"></dl>
+          <div id="baseline-playback" hidden>
+            <video controls playsinline preload="metadata" aria-label="MediaRecorder output"></video>
+            <a download>Download MP4</a>
+          </div>
+        </section>
+        <section>
+          <h2>WebCodecs</h2>
+          <p id="experimental-message">Awaiting a run.</p>
+          <dl id="experimental-result"></dl>
+          <div id="experimental-playback" hidden>
+            <video controls playsinline preload="metadata" aria-label="WebCodecs output"></video>
+            <a download>Download MP4</a>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script type="module" src="./benchmark.ts"></script>
+  </body>
+</html>
