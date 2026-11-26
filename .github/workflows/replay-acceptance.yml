@@ -28,8 +28,8 @@ jobs:
       cancel-in-progress: false
     runs-on: ubuntu-24.04
     environment: replay-acceptance
-    # Includes setup and a long-running recording; remains below the 40-minute SQL lease.
-    timeout-minutes: 38
+    # Includes setup and several sequential recordings. Each claim has its own 40-minute SQL lease.
+    timeout-minutes: 53
     steps:
       - name: Record worker start time
         run: echo "REPLAY_JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
@@ -87,7 +87,7 @@ jobs:
           PY
       - name: Process queued recordings
         if: github.event_name == 'schedule' || inputs.operation == 'process-one' || inputs.operation == 'process-queue'
-        timeout-minutes: 35
+        timeout-minutes: 50
         env:
           REPLAY_OPERATION: ${{ inputs.operation }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -97,9 +97,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          # Respect both the 35-minute step and the 38-minute job, leaving a minute for teardown.
-          budget=$((37 * 60 - ($(date +%s) - REPLAY_JOB_STARTED)))
-          if (( budget > 35 * 60 )); then budget=$((35 * 60)); fi
+          # Respect both the 50-minute step and the 53-minute job, leaving a minute for teardown.
+          budget=$((52 * 60 - ($(date +%s) - REPLAY_JOB_STARTED)))
+          if (( budget > 50 * 60 )); then budget=$((50 * 60)); fi
           if (( budget < 0 )); then budget=0; fi
           max_jobs=1
           if [[ "$GITHUB_EVENT_NAME" == schedule || "$REPLAY_OPERATION" == process-queue ]]; then

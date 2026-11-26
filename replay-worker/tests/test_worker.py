@@ -6,12 +6,13 @@ import subprocess
 import tempfile
 import unittest
 import io
+import signal
 from pathlib import Path
 from unittest.mock import patch
 
 import cv2
 import numpy as np
-from replay_worker import SupabaseAPI, validate_job, validate_corners, verify_video, run_once, process_recording, prepare_analysis_source, verify_toolchain, main, run_batch, CLAIM_RUNTIME_RESERVE_SECONDS, MAX_BATCH_JOBS
+from replay_worker import SupabaseAPI, validate_job, validate_corners, verify_video, run_once, process_recording, prepare_analysis_source, verify_toolchain, main, run_batch, CLAIM_RUNTIME_RESERVE_SECONDS, MAX_BATCH_JOBS, MAX_BATCH_RUNTIME_SECONDS, JobDeadlineExceeded
 
 UID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 LEASE = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
@@ -139,6 +140,40 @@ class BatchTests(unittest.TestCase):
         summary = self.batch()
         self.assertEqual((summary['completed'], summary['stop'], summary['elapsed_seconds']), (1, 'runtime_limit', 61))
         self.assertEqual(len(self.jobs), 1)
+
+    def test_three_three_minute_recordings_fit_the_workflow_budget(self):
+        self.jobs = [self.job(index) for index in range(3)]
+        self.processing_seconds = 180
+        summary = self.batch(seconds=MAX_BATCH_RUNTIME_SECONDS - CLAIM_RUNTIME_RESERVE_SECONDS)
+        self.assertEqual((summary['completed'], summary['stop'], summary['elapsed_seconds']), (3, 'queue_empty', 540))
+        self.assertEqual(sum(name == 'complete_frame_replay_processing' for name, _ in self.calls), 3)
+
+    def test_job_watchdog_stops_batch_and_leaves_lease_for_recovery(self):
+        self.jobs = [self.job(1), self.job(2)]
+        handler = signal.getsignal(signal.SIGALRM)
+
+        def interrupt(*_):
+            signal.raise_signal(signal.SIGALRM)
+
+        self.processor = interrupt
+        summary = self.batch()
+        self.assertEqual(summary['stop'], 'job_timeout')
+        self.assertEqual([name for name, _ in self.calls], ['claim_frame_replay_processing', 'download'])
+        self.assertEqual(len(self.jobs), 1)
+        self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0, 0))
+        self.assertEqual(signal.getsignal(signal.SIGALRM), handler)
+
+    def test_job_watchdog_terminates_detector_process_group(self):
+        with tempfile.TemporaryDirectory() as work, \
+             patch('replay_worker.prepare_analysis_source', return_value=(None, 0)), \
+             patch('replay_worker.validate_corners', return_value=np.zeros((4, 2))), \
+             patch('replay_worker.subprocess.Popen') as popen, patch('replay_worker.os.killpg') as kill:
+            child = popen.return_value
+            child.communicate.side_effect = [JobDeadlineExceeded(), None]
+            with self.assertRaises(JobDeadlineExceeded):
+                process_recording(None, JOB, Path(work))
+            kill.assert_called_once_with(child.pid, signal.SIGKILL)
+            self.assertEqual(child.communicate.call_count, 2)
 
     def test_batch_count_and_manual_single_job_cap(self):
         self.jobs = [self.job(index) for index in range(MAX_BATCH_JOBS + 2)]

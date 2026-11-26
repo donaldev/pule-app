@@ -17,9 +17,11 @@ out of frontend builds and logs.
 - **process-queue** uses the scheduled batch path and claims up to five jobs sequentially.
 - **cleanup-only** runs one bounded cleanup pass without claiming processing work.
 
-The processing job has a 38-minute timeout, including setup. Its processing step
-has a 35-minute hard timeout. Before each claim the worker requires at least
-34 minutes of remaining budget for source download, processing and publication.
+The processing job has a 53-minute timeout, including setup. Its processing step
+has a 50-minute hard timeout. A single claim and its work have a 35-minute watchdog,
+including download, processing, publication and enqueueing cleanup. Before each
+claim the worker requires 36 minutes of remaining budget. A watchdog expiry
+stops the batch and leaves any unconfirmed work for SQL lease recovery.
 The processing concurrency group serializes scheduled and manual runs. The
 existing SQL leases govern claims and fence publication. The worker reports
 counts, elapsed time and its stop reason in the Actions summary.

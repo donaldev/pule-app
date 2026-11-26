@@ -27,12 +27,21 @@ from replay_processor import analysis_crop, ANALYSIS_WIDTH, MAX_ANALYSIS_HEIGHT
 
 MAX_BYTES = 262144000
 MAX_BATCH_JOBS = 5
-MAX_BATCH_RUNTIME_SECONDS = 35 * 60
-# Allow 20 minutes for processing, up to 10 for R2 download, and four
-# for claiming, probes, remuxes and publication. Actions enforces the hard timeout.
-CLAIM_RUNTIME_RESERVE_SECONDS = 34 * 60
+MAX_BATCH_RUNTIME_SECONDS = 50 * 60
+# Per claim: up to 10 minutes for download, 20 for the detector, and five
+# for probes, remuxes, publication and enqueueing cleanup. Leave time to unwind.
+JOB_TIMEOUT_SECONDS = 35 * 60
+CLAIM_RUNTIME_RESERVE_SECONDS = JOB_TIMEOUT_SECONDS + 60
 UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 KEY_RE = re.compile(rf'^{UUID}/{UUID}/{UUID}\.mp4$')
+
+
+class JobDeadlineExceeded(BaseException):
+    """Leave ambiguous writes to the existing SQL lease recovery."""
+
+
+def expire_job(_signal, _frame):
+    raise JobDeadlineExceeded()
 
 
 class SupabaseAPI:
@@ -186,6 +195,13 @@ def process_recording(source, job, work):
         os.killpg(child.pid, signal.SIGKILL)
         child.communicate()
         raise ValueError('Processor time limit exceeded') from None
+    except JobDeadlineExceeded:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        child.communicate()
+        raise
     if child.returncode:
         raise ValueError('Processor did not generate a replay')
     with (work / 'detector' / 'candidate_clips.csv').open() as manifest:
@@ -288,7 +304,17 @@ def run_batch(api, *, r2=None, max_jobs=1, deadline, clock=time.monotonic):
             if deadline - clock() < CLAIM_RUNTIME_RESERVE_SECONDS:
                 stop = 'runtime_limit'
                 break
-            status = run_once(api, r2=r2, seen=seen)['status']
+            previous_handler = signal.signal(signal.SIGALRM, expire_job)
+            signal.setitimer(signal.ITIMER_REAL, JOB_TIMEOUT_SECONDS)
+            try:
+                status = run_once(api, r2=r2, seen=seen)['status']
+            except JobDeadlineExceeded:
+                # A claim or publication may have committed. Let the lease and cleanup reconcile it.
+                stop = 'job_timeout'
+                break
+            finally:
+                signal.setitimer(signal.ITIMER_REAL, 0)
+                signal.signal(signal.SIGALRM, previous_handler)
             if status in ('idle', 'duplicate_claim'):
                 stop = 'queue_empty' if status == 'idle' else status
                 break
@@ -321,10 +347,10 @@ def main():
     parser.add_argument('--max-jobs', type=int, default=1, choices=range(1, MAX_BATCH_JOBS + 1),
                         help='Maximum jobs to claim (default: 1)')
     parser.add_argument('--runtime-seconds', type=int, default=MAX_BATCH_RUNTIME_SECONDS,
-                        help='Available processing time, capped at 35 minutes')
+                        help='Available processing time, capped at 50 minutes')
     args = parser.parse_args()
     if not 0 <= args.runtime_seconds <= MAX_BATCH_RUNTIME_SECONDS:
-        parser.error('--runtime-seconds must be between 0 and 2100')
+        parser.error(f'--runtime-seconds must be between 0 and {MAX_BATCH_RUNTIME_SECONDS}')
     deadline = time.monotonic() + args.runtime_seconds
     stage = 'verify_toolchain'
     try:
@@ -342,7 +368,7 @@ def main():
             os.environ['SUPABASE_SERVICE_ROLE_KEY']
         )
         summary = run_batch(api, r2=r2, max_jobs=args.max_jobs, deadline=deadline)
-        if summary['failed'] or summary['unconfirmed'] or summary['stop'] == 'duplicate_claim':
+        if summary['failed'] or summary['unconfirmed'] or summary['stop'] in ('duplicate_claim', 'job_timeout'):
             raise SystemExit(1)
 
     except Exception as exc:
