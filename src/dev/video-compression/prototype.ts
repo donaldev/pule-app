@@ -161,10 +161,10 @@ function setup() {
       details(output, [['Size', mb(blob.size)], ['Size reduction', `${(100 * (1 - blob.size / input.file.size)).toFixed(1)}%`],
         ['Resolution', `${geometry.width} × ${geometry.height}`],
         ['Format', `MP4 · H.264 (${sampleTypes.video[0]})${target.audio ? ' · AAC (mp4a)' : ''}`],
-        ['100 MB target', blob.size <= compressedReplayOutputLimit ? 'Met' : 'Exceeded'], ['Compression time', seconds(elapsed)]])
+        ['200 MB limit', blob.size <= compressedReplayOutputLimit ? 'Met' : 'Exceeded'], ['Compression time', seconds(elapsed)]])
       result.hidden = false
       progress.value = 1
-      status.textContent = blob.size <= compressedReplayOutputLimit ? 'Compression complete.' : 'Compression complete. The output exceeds 100 MB.'
+      status.textContent = blob.size <= compressedReplayOutputLimit ? 'Compression complete.' : 'Compression complete. The output exceeds 200 MB.'
     } catch (error) {
       status.textContent = controller.signal.aborted ? 'Compression cancelled.' : error instanceof Error ? error.message : 'Compression failed.'
     } finally {

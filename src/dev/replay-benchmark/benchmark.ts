@@ -1,7 +1,7 @@
 import { compressedReplayOutputLimit } from '../../data/replayUploadLimit.mjs'
 import { displaySize, inspectRecording } from '../../features/replays/recordingGeometry'
 import { videoSampleTypes } from '../../features/replays/videoSampleTypes'
-import { audioBitrate, compressVideo, compressionSupport, planCompression } from '../../features/replays/videoCompression'
+import { compressVideo, compressionSupport, planCompression } from '../../features/replays/videoCompression'
 import type { WorkerReply, WorkerRequest } from './webcodecs.worker'
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T
@@ -14,9 +14,10 @@ const elapsed = element<HTMLOutputElement>('elapsed')
 const capabilities = element('capabilities')
 const buttons = { baseline: element<HTMLButtonElement>('baseline'), experimental: element<HTMLButtonElement>('experimental') }
 type Method = keyof typeof buttons
-type Source = { file: File; duration: number; plan: WorkerRequest['plan']; hasAudio: boolean; baseline: boolean }
+type Source = WorkerRequest['source'] & { file: File; plan: ReturnType<typeof planCompression> | null; hasAudio: boolean }
 let source: Source | undefined
 let supported = false
+let experimentalRate: number | undefined
 let operation: AbortController | undefined
 const urls: Partial<Record<Method, string>> = {}
 
@@ -35,7 +36,7 @@ function details(target: HTMLElement, rows: [string, string][]) {
 function controls() {
   const busy = !!operation
   choose.disabled = picker.disabled = busy
-  buttons.baseline.disabled = busy || !source?.baseline
+  buttons.baseline.disabled = busy || !source?.plan
   buttons.experimental.disabled = busy || !source || !supported
   cancel.disabled = !busy
 }
@@ -64,7 +65,7 @@ function metadata(blob: Blob, signal: AbortSignal) {
   })
 }
 
-function workerRequest(request: WorkerRequest, signal: AbortSignal, onProgress?: (fraction: number) => void) {
+function workerRequest(request: WorkerRequest, signal: AbortSignal, onProgress?: (fraction: number, bytes: number, processed: number) => void) {
   return new Promise<Blob | undefined>((resolve, reject) => {
     signal.throwIfAborted()
     if (!window.isSecureContext || typeof Worker !== 'function') throw Error('WebCodecs benchmark requires a secure context and a dedicated worker.')
@@ -82,10 +83,11 @@ function workerRequest(request: WorkerRequest, signal: AbortSignal, onProgress?:
       switch (data.type) {
         case 'capabilities':
           supported = data.supported
+          experimentalRate = data.videoRate
           capabilities.textContent = `Decoder ${data.decoder} · Encoder ${data.encoder} · Audio ${data.audio}. Hardware use is unverified.`
           if (request.action === 'probe') finish()
           break
-        case 'progress': onProgress?.(data.fraction); break
+        case 'progress': onProgress?.(data.fraction, data.bytes, data.processed); break
         case 'output': finish(undefined, data.blob); break
         case 'error': finish(Error(data.message)); break
       }
@@ -107,19 +109,6 @@ function clear(method: Method) {
   element(`${method}-message`).textContent = 'Awaiting a run.'
 }
 
-// Use the production plan for both paths when MediaRecorder is available.
-// The standalone probe can still run on a browser without that recorder.
-function experimentalPlan({ width, height, duration }: { width: number; height: number; duration: number }, audio: boolean) {
-  const videoRate = Math.min(8_000_000, Math.floor(compressedReplayOutputLimit * 0.88 * 8 / duration) - (audio ? audioBitrate : 0))
-  if (videoRate < 350_000) throw Error('This recording is too long for the 100 MB target.')
-  const shortEdge = videoRate >= 2_000_000 ? 1080 : 720
-  const scale = Math.min(1, shortEdge / Math.min(width, height), shortEdge * 16 / 9 / Math.max(width, height))
-  return {
-    width: Math.floor(width * scale / 2) * 2, height: Math.floor(height * scale / 2) * 2,
-    videoRate, audio, mime: 'video/mp4',
-  }
-}
-
 choose.onclick = () => picker.click()
 picker.onchange = async () => {
   const file = picker.files?.[0]
@@ -129,6 +118,7 @@ picker.onchange = async () => {
   operation = controller
   source = undefined
   supported = false
+  experimentalRate = undefined
   controls()
   clear('baseline'); clear('experimental')
   details(element('source'), [])
@@ -155,12 +145,16 @@ picker.onchange = async () => {
     const hasAudio = codecs.audio.length > 0
     const baselineSupport = compressionSupport()
     const baseline = !!(baselineSupport?.video || (hasAudio && baselineSupport?.audio))
-    const plan = baseline ? planCompression(media, hasAudio) : experimentalPlan(media, hasAudio)
-    source = { file, duration: media.duration, plan, hasAudio, baseline }
+    let plan: Source['plan'] = null
+    if (baseline) {
+      try { plan = planCompression(media, hasAudio) }
+      catch (error) { element('baseline-message').textContent = error instanceof Error ? error.message : 'No MediaRecorder plan available.' }
+    }
+    source = { file, ...media, plan, hasAudio }
     if (!baseline) element('baseline-message').textContent = 'MediaRecorder H.264 is unavailable on this device.'
-    else if (hasAudio && !plan.audio) element('baseline-message').textContent = 'MediaRecorder AAC unavailable. This run will be silent.'
+    else if (hasAudio && plan && !plan.audio) element('baseline-message').textContent = 'MediaRecorder AAC unavailable. This run will be silent.'
     capabilities.textContent = 'Checking WebCodecs configurations on this device…'
-    await workerRequest({ action: 'probe', file, plan }, controller.signal)
+    await workerRequest({ action: 'probe', file, source: media }, controller.signal)
   } catch (error) {
     capabilities.textContent = controller.signal.aborted ? 'Selection cancelled.' : error instanceof Error ? error.message : 'Unable to inspect this file.'
   } finally {
@@ -174,8 +168,9 @@ function jsHeap() {
 }
 
 async function run(method: Method) {
-  if (!source || operation || (method === 'experimental' && !supported)) return
-  const { file, duration, plan, hasAudio } = source
+  if (!source || operation || (method === 'experimental' ? !supported : !source.plan)) return
+  const { file, duration, width, height, plan, hasAudio } = source
+  const mediaSource = { width, height, duration }
   const controller = new AbortController()
   const { signal } = controller
   operation = controller
@@ -185,10 +180,28 @@ async function run(method: Method) {
   progress.removeAttribute('value')
   progress.hidden = false
   const started = performance.now()
+  let bytes = 0
+  let processed = 0
+  let finalBytes: number | undefined
+  let finishedIn: number | undefined
+  let resultRows: [string, string][] = []
+  const diagnostics = (time: number): [string, string][] => {
+    const bitrate = method === 'baseline' ? plan?.videoRate : experimentalRate
+    return [
+      ['Requested video bitrate', bitrate === undefined ? 'Unavailable' : `${bitrate.toLocaleString()} bps`],
+      ['Actual output bytes', bytes.toLocaleString()],
+      ['Source processed', `${seconds(processed)} / ${seconds(duration)}`],
+      ['Elapsed', seconds(time)],
+      ['Speed', time > 0 && processed > 0 ? `${(processed / time).toFixed(2)}× real time` : '—'],
+      ['Final output size', finalBytes === undefined ? 'No completed MP4' : mb(finalBytes)],
+    ]
+  }
   const initialHeap = jsHeap()
   let sampledHeap = initialHeap
   const timer = window.setInterval(() => {
-    elapsed.value = `${seconds((performance.now() - started) / 1000)} elapsed`
+    const time = (performance.now() - started) / 1000
+    elapsed.value = `${seconds(time)} elapsed`
+    details(element(`${method}-result`), diagnostics(finishedIn ?? time))
     if (sampledHeap !== undefined) sampledHeap = Math.max(sampledHeap, jsHeap() ?? 0)
   }, 250)
   const advance = (fraction: number) => {
@@ -200,14 +213,26 @@ async function run(method: Method) {
   }
   try {
     const blob = method === 'baseline'
-      ? (await compressVideo(file, duration, plan, signal, advance)).blob
-      : await workerRequest({ action: 'encode', file, plan }, signal, advance)
+      ? (await compressVideo(file, duration, plan!, signal, (fraction) => {
+        processed = Math.max(processed, fraction * duration)
+        advance(fraction)
+      }, (outputBytes, sourceSeconds) => {
+        bytes = outputBytes
+        processed = Math.max(processed, Math.min(duration, sourceSeconds))
+      })).blob
+      : await workerRequest({ action: 'encode', file, source: mediaSource }, signal, (fraction, outputBytes, sourceSeconds) => {
+        bytes = outputBytes
+        processed = Math.max(processed, Math.min(duration, sourceSeconds))
+        advance(fraction)
+      })
     signal.throwIfAborted()
-    const time = (performance.now() - started) / 1000
-    if (!blob?.size || blob.size > compressedReplayOutputLimit) throw Error('Output must be between 1 byte and 100 MB.')
+    finishedIn = (performance.now() - started) / 1000
+    if (!blob?.size || blob.size > compressedReplayOutputLimit) throw Error('Output must be between 1 byte and 200 MB.')
+    finalBytes = bytes = blob.size
+    processed = duration
     const [media, geometry, codecs] = await Promise.all([metadata(blob, signal), inspectRecording(blob), videoSampleTypes(blob)])
     signal.throwIfAborted()
-    if (geometry.rotation !== 0 || media.width !== plan.width || media.height !== plan.height
+    if (geometry.rotation !== 0 || (method === 'baseline' && (media.width !== plan?.width || media.height !== plan.height))
         || !Number.isFinite(media.duration) || !codecs.video.some(codec => codec === 'avc1' || codec === 'avc3')) {
       throw Error('Output did not match the expected upright H.264 format.')
     }
@@ -222,23 +247,26 @@ async function run(method: Method) {
     const download = playback.querySelector('a')!
     download.href = url
     download.download = file.name.replace(/\.mp4$/i, '') + `-${method}.mp4`
-    details(element(`${method}-result`), [
-      ['Original / output', `${mb(file.size)} / ${mb(blob.size)}`], ['Encode and mux', seconds(time)],
-      ['Speed', `${(duration / time).toFixed(2)}× real time`], ['Resolution', `${media.width} × ${media.height}`],
+    resultRows = [
+      ['Resolution', `${media.width} × ${media.height}`],
       ['Video / audio', `${codecs.video.join(', ')} / ${codecs.audio.join(', ') || 'none'}`],
       ['Output duration', seconds(media.duration)],
-      ['Main-page JS heap sampled peak', sampledHeap === undefined ? 'Unavailable' : mb(Math.max(sampledHeap, jsHeap() ?? 0))],
-    ])
+    ]
     playback.hidden = false
     element(`${method}-message`).textContent = 'Ready for playback and download.'
     status.textContent = 'Benchmark complete.'
-    elapsed.value = `${seconds(time)} elapsed`
   } catch (error) {
     const message = signal.aborted ? 'Benchmark cancelled.' : error instanceof Error ? error.message : 'Benchmark failed.'
     element(`${method}-message`).textContent = message
     status.textContent = message
   } finally {
     clearInterval(timer)
+    const time = finishedIn ?? (performance.now() - started) / 1000
+    elapsed.value = `${seconds(time)} elapsed`
+    details(element(`${method}-result`), [
+      ...diagnostics(time), ...resultRows,
+      ['Main-page JS heap sampled peak', sampledHeap === undefined ? 'Unavailable' : mb(Math.max(sampledHeap, jsHeap() ?? 0))],
+    ])
     operation = undefined
     progress.hidden = true
     controls()

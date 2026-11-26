@@ -159,7 +159,7 @@ test('a valid original at exactly 200 MB uploads directly', async () => {
  } finally {restore()}
 })
 
-test('a 100 MB compressed result can upload, but one more byte cannot', async () => {
+test('a 200 MB compressed result can upload, but one more byte cannot', async () => {
  const restore=mockPreviewUrl()
  try {
   for(const oversized of [false,true]) {
@@ -170,11 +170,11 @@ test('a 100 MB compressed result can upload, but one more byte cannot', async ()
    button(tree,'Upload & create replay').props.onClick();await tick()
    const result=render()
    if(oversized) {
-    assert.match(JSON.stringify(result),/100 MB compressed output limit/)
+    assert.match(JSON.stringify(result),/200 MB compressed output limit/)
     assert.equal(button(result,'Upload & create replay').props.disabled,false)
     assert.equal(h.calls.some(c=>['reserve','transfer'].includes(c[0])),false)
    } else {
-    assert.deepEqual(h.calls.find(c=>c[0]==='transfer'),['transfer',100_000_000,'large_compressed.mp4'])
+    assert.deepEqual(h.calls.find(c=>c[0]==='transfer'),['transfer',200_000_000,'large_compressed.mp4'])
    }
   }
  } finally {restore()}

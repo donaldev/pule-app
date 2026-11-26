@@ -1,5 +1,5 @@
 export const directReplayUploadLimit = 200_000_000
-export const compressedReplayOutputLimit = 100_000_000
+export const compressedReplayOutputLimit = directReplayUploadLimit
 
 export function assertDirectReplayUploadSize(bytes) {
   if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > directReplayUploadLimit) {

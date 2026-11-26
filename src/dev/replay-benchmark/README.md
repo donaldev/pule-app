@@ -59,22 +59,25 @@ require more glue for transcode, timestamps and writing. The standalone
 [mp4-muxer](https://github.com/Vanilagy/mp4-muxer/blob/main/MIGRATION-GUIDE.md) is
 deprecated and only covers writing.
 
-The experiment uses the baseline video dimensions and bitrate target where
-available. It re-encodes video as upright H.264 at 30 fps, sampling the source
+Both paths use the same bitrate budgeting rules. The MediaRecorder plan reserves
+AAC at 160 kbps for its 128 kbps request. WebCodecs reserves the actual number of
+AAC bytes using metadata-only packet reads, so its requested video bitrate can
+differ. Plans aim for about 180 MB after allowing for MP4 overhead and video
+bitrate overshoot. Encoder settings are targets and smaller valid output is kept. It re-encodes video as upright H.264 at 30 fps, sampling the source
 presentation timeline onto a constant-rate grid because the replay worker uses
 frame index divided by FPS for shot timing. This retains the overall timeline
 with frame-grid rounding. The primary AAC track is copied. Unsupported audio
 is rejected instead of being dropped. The same source-to-display transform and
 output scaling used by replay compression apply to the baked orientation.
 
-The output sink rejects writes past 100,000,000 bytes. Output pages and the final
+The output sink rejects writes past 200,000,000 bytes. Output pages and the final
 Blob can overlap briefly in memory. Chrome's main-page sampled JS heap metric
 excludes worker and native codec buffers. A supported codec configuration and
 an accepted hardware preference do not establish which hardware actually ran.
 
 ## Local verification
 
-Desktop Chrome with a 22.74-second H.264/AAC source produced these results:
+During initial development, desktop Chrome with a 22.74-second H.264/AAC source produced these results:
 
 | Path | Encode and mux | Output | Duration |
 | --- | ---: | ---: | ---: |

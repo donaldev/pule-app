@@ -167,7 +167,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       const provider = fixed ? previous?.source_provider : import.meta.env.VITE_RECORDING_UPLOAD_API_URL ? 'r2' : 'supabase'
       if (provider === 'r2' && fixed && previous) assertDirectReplayUploadSize(previous.bytes)
       if (provider === 'r2' && chosen.size > directReplayUploadLimit && !compressionSupport()) {
-        throw Error('Videos over 200 MB must be compressed to 100 MB or less. This browser cannot compress MP4s. Choose a smaller compatible MP4.')
+        throw Error('Videos over 200 MB must be compressed before upload. This browser cannot compress MP4s. Choose a smaller compatible MP4.')
       }
       const g = await inspectRecording(chosen); ensureActive()
       if (previous && fixed) {
@@ -225,8 +225,7 @@ export function RecordingUpload({ userId, frame, onPublished, initialFile, initi
       })
       ensureActive()
       if (!result.blob.size) throw Error('Compression produced an empty video.')
-      if (result.blob.size > compressedReplayOutputLimit) throw Error('The compressed video exceeds the 100 MB compressed output limit.')
-      if (result.blob.size >= source.size) throw Error('Compression did not make this recording smaller.')
+      if (result.blob.size > compressedReplayOutputLimit) throw Error('The compressed video exceeds the 200 MB compressed output limit.')
       const finished = new File([result.blob], source.name.replace(/\.mp4$/i, '') + '_compressed.mp4', { type: 'video/mp4' })
       const selected = { file: finished, geometry: result.geometry, operation: crypto.randomUUID() }
       setCompressed(selected)

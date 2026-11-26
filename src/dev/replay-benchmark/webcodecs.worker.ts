@@ -1,19 +1,19 @@
 import {
-  BlobSource, canEncodeVideo, Conversion, Input, MP4,
+  BlobSource, canEncodeVideo, Conversion, EncodedPacketSink, Input, MP4,
   Mp4OutputFormat, Output, Quality, StreamTarget,
 } from 'mediabunny'
 import { compressedReplayOutputLimit } from '../../data/replayUploadLimit.mjs'
 import type { StreamTargetChunk } from 'mediabunny'
-import type { CompressionPlan } from '../../features/replays/videoCompression'
+import { planCompressionBudget } from '../../features/replays/videoCompression'
 
 export type WorkerRequest = {
   action: 'probe' | 'encode'
   file: File
-  plan: CompressionPlan
+  source: { width: number; height: number; duration: number }
 }
 export type WorkerReply =
-  | { type: 'capabilities'; decoder: string; encoder: string; audio: string; supported: boolean }
-  | { type: 'progress'; fraction: number }
+  | { type: 'capabilities'; decoder: string; encoder: string; audio: string; supported: boolean; videoRate?: number }
+  | { type: 'progress'; fraction: number; bytes: number; processed: number }
   | { type: 'output'; blob: Blob }
   | { type: 'error'; message: string }
 
@@ -22,13 +22,25 @@ function send(reply: WorkerReply) {
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
-  const { action, file, plan } = event.data
+  const { action, file, source } = event.data
   const input = new Input({ source: new BlobSource(file, { maxCacheSize: 8 * 1024 * 1024 }), formats: [MP4] })
+  let bytes = 0
+  let processed = 0
+  let fraction = 0
   try {
     const video = await input.getPrimaryVideoTrack()
     const audio = await input.getPrimaryAudioTrack()
     if (!video) throw Error('No video track found.')
 
+    const audioCodec = await audio?.getCodecParameterString()
+    const canPreserveAudio = !audio || !!audioCodec?.startsWith('mp4a.40.')
+    let audioBytes = 0
+    if (audio && canPreserveAudio) {
+      for await (const packet of new EncodedPacketSink(audio).packets(undefined, undefined, { metadataOnly: true })) {
+        audioBytes += packet.byteLength
+      }
+    }
+    const plan = planCompressionBudget(source, audioBytes)
     const config = await video.getDecoderConfig()
     const quality = new Quality({ bitrate: plan.videoRate })
     const outputConfig = { width: plan.width, height: plan.height, frameRate: 30, quality }
@@ -40,8 +52,6 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     const preferred = await probe('prefer-hardware')
     const hardwareAcceleration = preferred.decode && preferred.encode ? 'prefer-hardware' : 'no-preference'
     const available = hardwareAcceleration === 'prefer-hardware' ? preferred : await probe('no-preference')
-    const audioCodec = await audio?.getCodecParameterString()
-    const canPreserveAudio = !audio || !!audioCodec?.startsWith('mp4a.40.')
     const supported = available.decode && available.encode && canPreserveAudio
     const preference = hardwareAcceleration === 'prefer-hardware' ? 'hardware preference accepted' : 'browser default'
     send({
@@ -49,7 +59,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       decoder: `${config?.codec ?? 'Unknown'} · ${available.decode ? preference : 'unsupported'}`,
       encoder: `H.264 · ${available.encode ? preference : 'unsupported'}`,
       audio: audio ? canPreserveAudio ? `${audioCodec} · copied without re-encoding` : 'Only AAC audio is supported for the experiment' : 'No audio track',
-      supported,
+      supported, videoRate: plan.videoRate,
     })
     if (action === 'probe') return
     if (!supported) throw Error('The required video or audio configuration is unavailable on this browser.')
@@ -58,12 +68,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     // without growing or repeatedly copying a contiguous output buffer.
     const pageSize = 1024 * 1024
     const pages: Uint8Array<ArrayBuffer>[] = []
-    let bytes = 0
     const target = new StreamTarget(new WritableStream<StreamTargetChunk>({
       write({ data, position }) {
         const end = position + data.byteLength
-        if (end > compressedReplayOutputLimit) throw Error('Output exceeded the 100 MB limit.')
         bytes = Math.max(bytes, end)
+        if (bytes > compressedReplayOutputLimit) throw Error('Output exceeded the 200 MB limit.')
         for (let offset = 0; offset < data.byteLength;) {
           const index = Math.floor((position + offset) / pageSize)
           const start = (position + offset) % pageSize
@@ -86,12 +95,21 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     if (!conversion.isValid || !conversion.utilizedTracks.includes(video) || (audio && !conversion.utilizedTracks.includes(audio))) {
       throw Error('The encoder could not preserve the selected video and audio tracks.')
     }
-    conversion.onProgress = fraction => send({ type: 'progress', fraction })
+    let previousReport = 0
+    conversion.onProgress = (nextFraction, sourceSeconds) => {
+      fraction = nextFraction
+      processed = Math.max(processed, sourceSeconds)
+      const now = performance.now()
+      if (fraction < 1 && now - previousReport < 250) return
+      previousReport = now
+      send({ type: 'progress', fraction, bytes, processed })
+    }
     await conversion.execute()
     if (!bytes) throw Error('The encoder produced an empty file.')
     const parts = pages.map((page, index) => page.subarray(0, Math.min(pageSize, bytes - index * pageSize)))
     send({ type: 'output', blob: new Blob(parts, { type: 'video/mp4' }) })
   } catch (error) {
+    if (action === 'encode') send({ type: 'progress', fraction, bytes, processed })
     send({ type: 'error', message: error instanceof Error ? error.message : 'WebCodecs failed.' })
   } finally {
     input.dispose()

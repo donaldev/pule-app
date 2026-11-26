@@ -21,22 +21,26 @@ export function planCompression(source: { width: number; height: number; duratio
   if (!audio && !support?.video) throw Error('This browser cannot compress this recording to H.264 MP4.')
   if (!Number.isFinite(source.duration) || source.duration <= 0 || source.width < 16 || source.height < 16
       || source.width * source.height > 3840 * 2160) throw Error('Compression requires a playable recording no larger than 4K.')
-  return measurePlan(source, audio, audio ? MP4_WITH_AUDIO : MP4_VIDEO_ONLY)
+  const audioBytes = audio ? Math.ceil(audioBitrate * 1.25 * source.duration / 8) : 0
+  return { ...planCompressionBudget(source, audioBytes), audio, mime: audio ? MP4_WITH_AUDIO : MP4_VIDEO_ONLY }
 }
 
 export type CompressionPlan = { width: number; height: number; videoRate: number; audio: boolean; mime: string }
 
-function measurePlan(source: { width: number; height: number; duration: number }, audio: boolean, mime: string): CompressionPlan {
-  // Reserve 2% for container overhead and 10% for bitrate variation.
-  const videoRate = Math.min(8_000_000, Math.floor(compressedReplayOutputLimit * 0.88 * 8 / source.duration) - (audio ? audioBitrate : 0))
-  if (videoRate < 350_000) throw Error('The recording is too long for a useful result within the 100 MB budget.')
+export function planCompressionBudget(source: { width: number; height: number; duration: number }, audioBytes: number) {
+  // Aim for 90% of the cap, with another 2% of the cap reserved for MP4 overhead.
+  // The Pixel MediaRecorder run produced about 2.3× its requested video rate.
+  // Budget for 2.5× video overshoot; requested rates are neither guarantees nor minimums.
+  const videoBudget = compressedReplayOutputLimit * (0.90 - 0.02) - audioBytes
+  const videoRate = Math.min(8_000_000, Math.floor(videoBudget * 8 / (source.duration * 2.5)))
+  if (!Number.isFinite(videoRate) || videoRate < 350_000) throw Error('The recording is too long for a useful result within the 200 MB limit.')
   const shortEdge = videoRate >= 2_000_000 ? 1080 : 720
   const scale = Math.min(1, shortEdge / Math.min(source.width, source.height), shortEdge * 16 / 9 / Math.max(source.width, source.height))
   const even = (value: number) => Math.max(2, Math.floor(value / 2) * 2)
-  return { width: even(source.width * scale), height: even(source.height * scale), videoRate, audio, mime }
+  return { width: even(source.width * scale), height: even(source.height * scale), videoRate }
 }
 
-function record(video: HTMLVideoElement, settings: CompressionPlan, signal: AbortSignal) {
+function record(video: HTMLVideoElement, settings: CompressionPlan, signal: AbortSignal, onOutput?: CompressionOutput) {
   const canvas = document.createElement('canvas')
   canvas.width = settings.width
   canvas.height = settings.height
@@ -104,8 +108,9 @@ function record(video: HTMLVideoElement, settings: CompressionPlan, signal: Abor
       recorder.addEventListener('dataavailable', event => {
         if (!event.data.size) return
         bytes += event.data.size
+        onOutput?.(bytes, video.currentTime)
         if (bytes > compressedReplayOutputLimit) {
-          finish(Error('The compressed recording exceeds the 100 MB compressed output limit.'))
+          finish(Error('The compressed recording exceeds the 200 MB compressed output limit.'))
           return
         }
         chunks.push(event.data)
@@ -121,8 +126,10 @@ function record(video: HTMLVideoElement, settings: CompressionPlan, signal: Abor
   })
 }
 
+type CompressionOutput = (bytes: number, processedSeconds: number) => void
+
 export async function compressVideo(file: File, duration: number, target: CompressionPlan, signal: AbortSignal,
-  onProgress: (fraction: number, elapsedSeconds: number) => void) {
+  onProgress: (fraction: number, elapsedSeconds: number) => void, onOutput?: CompressionOutput) {
   signal.throwIfAborted()
   if (document.hidden) throw Error('Keep this tab visible while compressing.')
   const player = document.createElement('video')
@@ -137,7 +144,7 @@ export async function compressVideo(file: File, duration: number, target: Compre
   try {
     // Playback and AudioContext start directly from the user's compression gesture.
     player.src = url
-    const blob = await record(player, target, signal)
+    const blob = await record(player, target, signal, onOutput)
     const elapsed = (performance.now() - started) / 1000
     window.clearInterval(update)
     onProgress(1, elapsed)
