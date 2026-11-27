@@ -1,5 +1,5 @@
 import { actorAuthorization, getSupabase } from './supabase'
-import type { FrameReplay, MyReplay, ReplayMatch } from './database.types'
+import type { FrameReplay, MyReplay, ReplayMatch, ReplayShot, ReplayShotAction } from './database.types'
 
 export async function listFrameReplays(userId: string, sessionId: string): Promise<FrameReplay[]> {
   const authorization = await actorAuthorization(userId)
@@ -70,4 +70,32 @@ export async function countPublishedReplays(userId: string, sessionIds: string[]
   }
   await actorAuthorization(userId)
   return counts
+}
+
+export async function listReplayShots(userId: string, frameId: string, path: string, signal: AbortSignal): Promise<ReplayShot[]> {
+  const authorization = await actorAuthorization(userId)
+  const { data, error } = await getSupabase().rpc('list_frame_replay_shots', { p_frame: frameId })
+    .setHeader('Authorization', authorization).retry(false)
+    .abortSignal(AbortSignal.any([signal, AbortSignal.timeout(20_000)]))
+  await actorAuthorization(userId)
+  if (error?.code === 'PGRST202') return [] // Older deployments may lack the shot index RPC.
+  if (error || !Array.isArray(data)) throw Error('Shots could not be loaded.')
+  return data.filter(shot => shot.storage_path === path)
+}
+
+export async function reviewReplayShot(userId: string, frameId: string, shot: ReplayShot,
+  action: ReplayShotAction, bounds?: { start: number; end: number }) {
+  const authorization = await actorAuthorization(userId)
+  const { data, error } = await getSupabase().rpc('review_frame_replay_shot', {
+    p_frame: frameId, p_path: shot.storage_path, p_candidate: shot.candidate_key,
+    p_revision: shot.revision, p_action: action,
+    ...(bounds && { p_start_ms: bounds.start, p_end_ms: bounds.end }),
+  }).setHeader('Authorization', authorization).retry(false).abortSignal(AbortSignal.timeout(20_000))
+  await actorAuthorization(userId)
+  if (error?.code === '40001' || error?.code === '55000') {
+    throw Error('This shot changed since it was opened. Reload shots to get the latest version.')
+  }
+  if (error?.code === '42501') throw Error('Only eligible frame participants can review shots.')
+  if (error || typeof data !== 'number') throw Error('The review change could not be confirmed. Reload shots before trying again.')
+  return data
 }

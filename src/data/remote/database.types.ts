@@ -25,6 +25,17 @@ export interface ReplayUploadStatus {
 }
 export interface FrameRecordingState { frame_id: UUID; state: 'uploading' | 'processing' | 'cleanup'; owned: boolean; failed: boolean }
 export interface FrameReplay { frame_id: UUID; group_id: UUID; session_id: UUID; storage_path: string; created_at: string }
+export interface ReplayShot {
+  storage_path: string; candidate_key: string; shot_number: number
+  confidence: 'high' | 'possible'; accepted: boolean; revision: number
+  source_start_ms: number; source_end_ms: number
+  segment_source_start_ms: number; segment_source_end_ms: number
+  segment_replay_start_ms: number; segment_replay_end_ms: number
+  edited_source_start_ms: number | null; edited_source_end_ms: number | null
+  effective_replay_start_ms: number; effective_replay_end_ms: number
+  edit_needs_review: boolean
+}
+export type ReplayShotAction = 'accept' | 'reject' | 'restore' | 'edit' | 'reset_bounds'
 export interface ReplayMatch {
   venue_name: string
   occurred_on: string | null
@@ -74,6 +85,11 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      list_frame_replay_shots: { Args: { p_frame: UUID }; Returns: ReplayShot[] }
+      review_frame_replay_shot: {
+        Args: { p_frame: UUID; p_path: string; p_candidate: string; p_revision: number; p_action: ReplayShotAction; p_start_ms?: number; p_end_ms?: number }
+        Returns: number
+      }
       get_my_replays: { Args: Record<never, never>; Returns: MyReplay[] }
       get_session_frame_recordings: { Args: {p_session:UUID};Returns:FrameRecordingState[] }
       get_my_frame_recording: { Args: {p_frame:UUID};Returns:ReplayUploadStatus | null }
