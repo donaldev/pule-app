@@ -386,3 +386,61 @@ Use targeted rule/replay tests, persistence failure injection, sync integration 
 ## 12. Approval requested
 
 The technical architecture is approved in principle. Review the expanded experience direction, six-screen concepts, evidence contracts, release tiers, and proposed Phase 0V visual prototype milestone. The next proposed work is discovery and the separately authorized visual prototype, using supplied predecessor materials when available and labeled synthetic hypotheses where they are not. This plan update does not authorize prototype or application implementation, installations, Supabase resource creation, imports, or deployment. All existing reliability, security, historical preservation, and validation requirements remain in force.
+
+## 13. Future replay features
+
+### Pule Shots
+
+Classify the existing replay candidates using the frozen vacancy and LAB
+detector. Automatically include high-confidence shots and keep lower-confidence
+candidates available for optional manual review. Let users accept, reject, and
+restore individual candidates. Preserve stable candidate identities, raw source
+timestamps, replay timestamps, and padded clip boundaries. Full replay
+generation stays unchanged.
+
+Use the index for shot navigation, favourites, My Shots, personal shot
+collections, player profile showcases, and match highlights. Generate
+individual shot downloads on demand from the existing replay to avoid
+duplicating stored video.
+
+The repeat review measured 90.0% precision and 75.0% recall. On a different
+frame, precision was 84.6% and recall was 78.6%, with 17 of 19 false positives
+removed and three genuine shots rejected. Manual ball repositioning can
+still pass the filter. Keep lower-confidence candidates recoverable and
+reserve authoritative shot-count statistics for validated shot data.
+[Pipeline and validation details](FRAME_REPLAYS.md#frozen-shot-classification-and-validation)
+
+#### Shot-based performance analytics
+
+Use validated individual shot tracking to introduce the following metrics and
+records:
+
+- Total shots per frame.
+- Average shots per frame and per match.
+- Frame efficiency records.
+- Historical shot efficiency trends.
+- Fouls per 100 shots.
+- Individual player shot statistics once reliable player attribution is available.
+- A potential Frame Performance Rating combining shot count, frame duration,
+  fouls and win type.
+
+Distinguish genuine shots from false motion detections before calculating
+metrics. Account for tactical safety play when interpreting shot counts, since
+fewer shots alone do not establish better performance. Preserve the underlying
+shot data so future metrics can be calculated retrospectively.
+
+### Synchronized foul tagging
+
+Synchronize recording time with live scoring events and suggest the shot most
+likely associated with a manually logged foul. Allow for scorer reaction and
+entry delays, and let the scorer correct the association. Current ordinary foul
+controls update per-player counts. Saved frame records and completion events
+retain totals, with no individual foul occurrence timestamps. Future scoring
+would need explicit timestamped event capture and a shared clock reference.
+
+### Dedicated recording device
+
+Deferred for future investigation. An optional second phone could join the
+active match, record replay-ready footage and potentially upload while play
+continues, leaving the primary phone available for scoring. Share the frame
+identity and preserve clock synchronization for future foul tagging.
