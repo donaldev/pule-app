@@ -19,8 +19,8 @@ test('empty RLS results hide availability; malformed context is excluded; errors
  s.rows=[{...replay,session_id:'other'},{...replay,storage_path:'https://public/file'}];assert.deepEqual(await listFrameReplays('user','night'),[])
  s.error={message:'diagnostic'};await assert.rejects(listFrameReplays('user','night'),/availability/)
 })
-test('authorized signing uses exact private path and 60 seconds',async()=>{
- resetService();assert.equal(await signFrameReplay('user',replay),s.signed.signedUrl);assert.deepEqual(s.signs,[{bucket:'frame-replays',path:'night/frame.mp4',seconds:60}])
+test('authorized signing uses exact private path with separate playback and download lifetimes',async()=>{
+ resetService();assert.equal(await signFrameReplay('user',replay),s.signed.signedUrl);await signFrameReplay('user',replay,'replay.mp4');assert.deepEqual(s.signs,[{bucket:'frame-replays',path:'night/frame.mp4',seconds:300},{bucket:'frame-replays',path:'night/frame.mp4',seconds:60}])
 })
 test('wrong actors cannot sign; account changes discard signed results',async()=>{
  resetService();await assert.rejects(signFrameReplay('other',replay));assert.equal(s.signs.length,0)

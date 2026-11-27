@@ -3,8 +3,9 @@ import { Icon } from '../../components/ui/Icon'
 import { Modal } from '../../components/ui/Primitives'
 import type { ReplayMatch } from '../../data/remote/database.types'
 import { removeFrameReplay } from '../../data/remote/recordingService'
-import { downloadFrameReplay, signFrameReplay } from '../../data/remote/replayService'
+import { downloadFrameReplay, replayPlaybackLinkSeconds, signFrameReplay } from '../../data/remote/replayService'
 import { ReplayShots } from './ReplayShots'
+import { createReplayPlayback, type PlaybackState } from './replayPlayback'
 
 export type PlayableReplay = ReplayMatch & {
   frame_id: string
@@ -51,9 +52,8 @@ export function ReplayViewer({ userId, replay, description, onClose, onDeleted }
 }) {
   const [showShots, setShowShots] = useState(false)
   const [openedShots, setOpenedShots] = useState(false)
-  const [url, setUrl] = useState('')
-  const [error, setError] = useState('')
-  const [attempt, setAttempt] = useState(0)
+  const [playback, setPlayback] = useState<PlaybackState>({ ready: false, playing: false, message: 'Opening replay…', error: '' })
+  const transport = useRef<ReturnType<typeof createReplayPlayback> | null>(null)
   const [videoSize, setVideoSize] = useState<{ width: number; height: number }>()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [removing, setRemoving] = useState(false)
@@ -62,18 +62,18 @@ export function ReplayViewer({ userId, replay, description, onClose, onDeleted }
   const path = replay.storage_path
 
   useEffect(() => {
-    let active = true
-    signFrameReplay(userId, { storage_path: path }).then(
-      signed => { if (active) setUrl(signed) },
-      () => { if (active) setError('This replay could not be opened. Check your connection and access, then try again.') }
-    )
-    return () => { active = false }
-  }, [userId, path, attempt])
+    const element = video.current!
+    const controller = createReplayPlayback(element, () => signFrameReplay(userId, { storage_path: path }),
+      replayPlaybackLinkSeconds * 1000, setPlayback)
+    transport.current = controller
+    return () => {
+      transport.current = null
+      controller.destroy()
+    }
+  }, [userId, path])
 
   function close() {
-    video.current?.pause()
-    video.current?.removeAttribute('src')
-    video.current?.load()
+    transport.current?.stop()
     onClose()
   }
 
@@ -95,33 +95,29 @@ export function ReplayViewer({ userId, replay, description, onClose, onDeleted }
     <Modal title={`Frame ${replay.frame_number} replay`} onClose={close}>
       <div className={`replay-player${showShots ? ' replay-player-shots' : ''}`}>
         <div className="replay-view-switch" aria-label="Replay view" role="group">
-          <button type="button" aria-pressed={!showShots} onClick={() => { video.current?.pause(); setShowShots(false) }}>Full replay</button>
+          <button type="button" aria-pressed={!showShots} onClick={() => { transport.current?.stop(); setShowShots(false) }}>Full replay</button>
           <button type="button" aria-pressed={showShots} onClick={() => {
-            video.current?.pause()
+            transport.current?.stop()
             setOpenedShots(true)
             setShowShots(true)
           }}>Shots</button>
         </div>
         <div className="replay-media">
           {description && <p className="replay-context">{description}</p>}
-          {!url && !error && <p role="status">Opening replay…</p>}
-          {url && <video ref={video} key={url} src={url} controls={!showShots} playsInline preload="metadata"
+          {playback.message && <p role="status">{playback.message}</p>}
+          <video ref={video} data-opening={!videoSize && !playback.ready ? true : undefined} controls={!showShots && playback.ready} playsInline preload="metadata"
             data-portrait={videoSize && videoSize.height > videoSize.width ? 'true' : undefined}
             style={videoSize ? { aspectRatio: `${videoSize.width} / ${videoSize.height}`, width: `min(100%, calc((100dvh - 230px) * ${videoSize.width / videoSize.height}))` } : undefined}
             onLoadedMetadata={e => {
               const v = e.currentTarget
               if (v.videoWidth > 0 && v.videoHeight > 0) setVideoSize({ width: v.videoWidth, height: v.videoHeight })
             }}
-            aria-label={`Frame ${replay.frame_number} replay`}
-            onError={() => { setUrl(''); setError('Playback failed or this link has expired. Open a fresh replay link to try again.') }} />}
-          {error && <><p role="alert">{error}</p><button type="button" className="button" onClick={() => {
-            setError('')
-            setVideoSize(undefined)
-            setAttempt(n => n + 1)
-          }}>Open fresh replay link</button></>}
+            aria-label={`Frame ${replay.frame_number} replay`} />
+          {playback.error && <><p role="alert">{playback.error}</p>
+            <button type="button" className="button" onClick={() => transport.current?.retry()}>Retry playback</button></>}
         </div>
-        {openedShots && <ReplayShots userId={userId} frameId={replay.frame_id} path={path} video={video}
-          mediaKey={url} active={showShots} canReview={!!onDeleted} />}
+        {openedShots && <ReplayShots userId={userId} frameId={replay.frame_id} path={path} transport={transport}
+          playbackState={playback} active={showShots} canReview={!!onDeleted} />}
         {!showShots && <footer className="replay-player-actions">
           <ReplayDownload userId={userId} replay={replay} />
           {onDeleted && <button type="button" className="button button-secondary replay-delete"

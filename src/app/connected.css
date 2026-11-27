@@ -1323,3 +1323,5 @@
   width:2px; background:var(--text); transform:translateX(-50%);
 }
 .shot-editor h3 { scroll-margin-top:calc(min(32dvh, 280px) + 56px); }
+
+.replay-player video[data-opening="true"] { display:none; }

@@ -5,85 +5,7 @@ import { Icon } from '../../components/ui/Icon'
 import { ShotEditor } from './ShotEditor'
 import { replayBounds, shotTime, type ShotBounds } from './shotTimeline'
 
-function useShotPlayback(video: RefObject<HTMLVideoElement | null>, mediaKey: string, active: boolean) {
-  const command = useRef<{ at: number; bounds?: ShotBounds } | null>(null)
-  const [playing, setPlaying] = useState(false)
-
-  function run(v: HTMLVideoElement, next: NonNullable<typeof command.current>) {
-    v.pause()
-    v.currentTime = Math.min(next.at / 1000, v.duration)
-    if (next.bounds) void v.play().catch(() => { /* User can retry Play. */ })
-  }
-
-  useEffect(() => {
-    const element = video.current
-    if (!active) {
-      command.current = null
-      return
-    }
-    if (!element || !mediaKey) return
-    const v: HTMLVideoElement = element
-    let frame: number
-    const load = () => { if (command.current) run(v, command.current) }
-    const pause = () => { cancelAnimationFrame(frame); setPlaying(false) }
-    function stopAtBoundary() {
-      const bounds = command.current?.bounds
-      if (bounds && v.currentTime >= bounds.end / 1000) {
-        v.pause()
-        v.currentTime = Math.min(v.duration, bounds.end / 1000)
-      }
-      if (!v.paused) frame = requestAnimationFrame(stopAtBoundary)
-    }
-    function start() {
-      cancelAnimationFrame(frame)
-      setPlaying(true)
-      stopAtBoundary()
-    }
-    v.addEventListener('loadedmetadata', load)
-    v.addEventListener('play', start)
-    v.addEventListener('pause', pause)
-    v.addEventListener('ended', pause)
-    v.addEventListener('timeupdate', stopIfNeeded)
-    if (v.readyState >= 1) load()
-    function stopIfNeeded() {
-      if (!v.paused && command.current?.bounds && v.currentTime >= command.current.bounds.end / 1000) stopAtBoundary()
-    }
-    return () => {
-      cancelAnimationFrame(frame)
-      v.removeEventListener('loadedmetadata', load)
-      v.removeEventListener('play', start)
-      v.removeEventListener('pause', pause)
-      v.removeEventListener('ended', pause)
-      v.removeEventListener('timeupdate', stopIfNeeded)
-      v.pause()
-    }
-  }, [video, mediaKey, active])
-
-  function seek(at: number, bounds?: ShotBounds) {
-    const next = { at, bounds }
-    command.current = next
-    const v = video.current
-    if (v && v.readyState >= 1) run(v, next)
-  }
-
-  function stop() {
-    command.current = null
-    video.current?.pause()
-    setPlaying(false)
-  }
-
-  function toggle(bounds: ShotBounds) {
-    const v = video.current
-    if (v && !v.paused) {
-      v.pause()
-      return
-    }
-    const at = (v?.currentTime ?? -1) * 1000
-    seek(at >= bounds.start && at < bounds.end ? at : bounds.start, bounds)
-  }
-
-  return { seek, stop, toggle, playing: !!mediaKey && playing }
-}
+import type { createReplayPlayback, PlaybackState } from './replayPlayback'
 
 const byReplayTime = (a: ReplayShot, b: ReplayShot) =>
   a.effective_replay_start_ms - b.effective_replay_start_ms || a.shot_number - b.shot_number
@@ -99,9 +21,10 @@ function ShotList({ items, selected, busy, onSelect }: {
   </li>)}</ul>
 }
 
-export function ReplayShots({ userId, frameId, path, video, mediaKey, active, canReview }: {
+export function ReplayShots({ userId, frameId, path, transport, playbackState, active, canReview }: {
   userId: string; frameId: string; path: string
-  video: RefObject<HTMLVideoElement | null>; mediaKey: string; active: boolean; canReview: boolean
+  transport: RefObject<ReturnType<typeof createReplayPlayback> | null>
+  playbackState: PlaybackState; active: boolean; canReview: boolean
 }) {
   const [shots, setShots] = useState<ReplayShot[] | null>(null)
   const [selected, setSelected] = useState<string>()
@@ -115,7 +38,6 @@ export function ReplayShots({ userId, frameId, path, video, mediaKey, active, ca
   const selection = useRef<HTMLHeadingElement>(null)
   const undoButton = useRef<HTMLButtonElement>(null)
   const status = useRef<HTMLParagraphElement>(null)
-  const playback = useShotPlayback(video, mediaKey, active)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -138,7 +60,7 @@ export function ReplayShots({ userId, frameId, path, video, mediaKey, active, ca
   }
 
   function reload() {
-    playback.stop()
+    transport.current?.stop()
     setError('')
     setMessage('')
     setShots(null)
@@ -151,9 +73,7 @@ export function ReplayShots({ userId, frameId, path, video, mediaKey, active, ca
   function select(shot: ReplayShot) {
     setSelected(shot.candidate_key)
     setEditing(false)
-    playback.seek(shot.effective_replay_start_ms, {
-      start: shot.effective_replay_start_ms, end: shot.effective_replay_end_ms,
-    })
+    transport.current?.seek(shot.effective_replay_start_ms, shot.effective_replay_end_ms)
     requestAnimationFrame(() => selection.current?.focus())
   }
 
@@ -166,7 +86,7 @@ export function ReplayShots({ userId, frameId, path, video, mediaKey, active, ca
     try {
       const revision = await reviewReplayShot(userId, frameId, shot, action, bounds)
       if (action === 'reject') {
-        playback.stop()
+        transport.current?.stop()
         setEditing(false)
         setSelected(undefined)
         setUndo({ ...shot, revision })
@@ -184,7 +104,7 @@ export function ReplayShots({ userId, frameId, path, video, mediaKey, active, ca
           edited_source_start_ms: bounds.start, edited_source_end_ms: bounds.end,
           effective_replay_start_ms: replay.start, effective_replay_end_ms: replay.end,
         } : row) ?? [])
-        playback.seek(replay.start)
+        transport.current?.seek(replay.start)
         setEditing(false)
         setMessage('Shot boundaries saved.')
         requestAnimationFrame(() => selection.current?.focus())
@@ -212,10 +132,10 @@ export function ReplayShots({ userId, frameId, path, video, mediaKey, active, ca
         onClick={() => void review(undo, 'restore')}>Undo</button></div>}
     {shots?.length === 0 && <p>No shots are available for this replay.</p>}
     {current && currentBounds && (editing ? <ShotEditor key={current.candidate_key} shot={current} busy={busy}
-      onScrub={ms => playback.seek(ms)} onPreview={bounds => playback.seek(bounds.start, bounds)}
+      onScrub={ms => transport.current?.seek(ms, undefined, true)} onPreview={bounds => transport.current?.seek(bounds.start, bounds.end)}
       onSave={bounds => void review(current, 'edit', bounds)}
       onCancel={() => {
-        playback.seek(currentBounds.start)
+        transport.current?.seek(currentBounds.start)
         setEditing(false)
         requestAnimationFrame(() => selection.current?.focus())
       }} /> : <section className="shot-selected">
@@ -224,8 +144,8 @@ export function ReplayShots({ userId, frameId, path, video, mediaKey, active, ca
       <div className="shot-transport">
         <button type="button" className="button button-secondary" disabled={busy || index <= 0}
           onClick={() => select(playlist[index - 1])}>Previous</button>
-        <button type="button" className="button" disabled={!mediaKey} onClick={() => playback.toggle(currentBounds)}>
-          {playback.playing ? 'Pause' : 'Play shot'}
+        <button type="button" className="button" disabled={!playbackState.ready} onClick={() => transport.current?.toggle(currentBounds)}>
+          {playbackState.playing ? 'Pause' : 'Play shot'}
         </button>
         <button type="button" className="button button-secondary" disabled={busy || index >= playlist.length - 1}
           onClick={() => select(playlist[index + 1])}>Next</button>
@@ -233,8 +153,8 @@ export function ReplayShots({ userId, frameId, path, video, mediaKey, active, ca
       {canReview && <div className="shot-actions">
         {current.confidence === 'possible' && !current.accepted && <button type="button" className="button" disabled={busy}
           onClick={() => void review(current, 'accept')}>Accept</button>}
-        <button type="button" className="button button-secondary" disabled={busy || !mediaKey}
-          onClick={() => { playback.seek(currentBounds.start); setEditing(true) }}>Edit boundaries</button>
+        <button type="button" className="button button-secondary" disabled={busy || !playbackState.ready}
+          onClick={() => { transport.current?.seek(currentBounds.start); setEditing(true) }}>Edit boundaries</button>
         <button type="button" className="button button-secondary" disabled={busy}
           onClick={() => void review(current, 'reject')}>Reject</button>
       </div>}

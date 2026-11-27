@@ -25,9 +25,11 @@ export async function listMyReplays(userId: string): Promise<MyReplay[]> {
   return data
 }
 
+export const replayPlaybackLinkSeconds = 300
+
 export async function signFrameReplay(userId: string, replay: Pick<FrameReplay, 'storage_path'>, filename?: string): Promise<string> {
   await actorAuthorization(userId)
-  const { data, error } = await getSupabase().storage.from('frame-replays').createSignedUrl(replay.storage_path, 60, filename ? { download: filename } : undefined)
+  const { data, error } = await getSupabase().storage.from('frame-replays').createSignedUrl(replay.storage_path, filename ? 60 : replayPlaybackLinkSeconds, filename ? { download: filename } : undefined)
   if (error || !data?.signedUrl) throw new Error('This replay could not be opened. Please try again.')
   await actorAuthorization(userId)
   return data.signedUrl

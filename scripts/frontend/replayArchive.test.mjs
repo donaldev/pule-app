@@ -13,6 +13,12 @@ const useId=()=> 'replay-list';
 const useRef=initial=>{const h=globalThis.archive,i=h.cursor++;return h.states[i]??(h.states[i]={current:initial})};
 const useEffect=(fn,deps)=>{const h=globalThis.archive;if(!h.inViewer)return;if(!h.viewerDeps||deps.some((v,i)=>v!==h.viewerDeps[i])){h.viewerCleanup?.();h.viewerDeps=deps;h.viewerCleanup=fn()}};
 const downloadFrameReplay=async()=>{};
+const replayPlaybackLinkSeconds=300;
+const createReplayPlayback=(_video,sign,_lifetime,update)=>{
+ const retry=()=>sign().then(()=>update({ready:true}),()=>update({error:'Check your connection and access'}));
+ void retry();
+ return {retry,stop(){},destroy(){}};
+};
 const listFrameRecordings=async()=>[];const listFrameReplays=async()=>[];const signFrameReplay=async(user,replay)=>{globalThis.archive.signed.push([user,replay.storage_path]);if(globalThis.archive.signError)throw Error('offline');return 'https://private.test/signed'};
 const removeFrameReplay=async(...args)=>{globalThis.archive.removed.push(args);if(globalThis.archive.removeError)throw Error('Removal unconfirmed')};
 `
@@ -69,10 +75,9 @@ test('replay opens exact source, respects metadata aspect ratio, confirmation an
  assert.equal(find(tree,n=>n.type==='history').props.total,0);assert.ok(find(tree,n=>n.type==='RecordingUploadAction'))
  const readOnly=setup([replay(1)],1,false);button(readOnly(),'Watch replay').props.onClick();await tick();assert.equal(button(readOnly(),'Delete Replay'),undefined)
 })
-test('signing, expired playback and deletion errors remain visible without discarding the replay',async()=>{
- const render=setup([replay(1)]);archive.signError=true;button(render(),'Watch replay').props.onClick();render();await tick();let tree=render();assert.ok(button(tree,'Open fresh replay link'))
- archive.signError=false;button(tree,'Open fresh replay link').props.onClick();render();await tick();tree=render();find(tree,n=>n.type==='video').props.onError();tree=render();assert.match(JSON.stringify(tree),/expired/)
- button(tree,'Open fresh replay link').props.onClick();render();await tick();tree=render();archive.removeError=true;button(tree,'Delete Replay').props.onClick();tree=render();await button(tree,'Delete video').props.onClick();tree=render();assert.match(JSON.stringify(tree),/Removal unconfirmed/);assert.equal(find(tree,n=>n.type==='history').props.total,1)
+test('signing and deletion errors remain visible without discarding the replay',async()=>{
+ const render=setup([replay(1)]);archive.signError=true;button(render(),'Watch replay').props.onClick();render();await tick();let tree=render();assert.ok(button(tree,'Retry playback'))
+ archive.signError=false;button(tree,'Retry playback').props.onClick();render();await tick();tree=render();archive.removeError=true;button(tree,'Delete Replay').props.onClick();tree=render();await button(tree,'Delete video').props.onClick();tree=render();assert.match(JSON.stringify(tree),/Removal unconfirmed/);assert.equal(find(tree,n=>n.type==='history').props.total,1)
  find(tree,n=>n.type==='Modal'&&n.props.title==='Frame 1 replay').props.onClose();assert.equal(find(render(),n=>n.type==='video'),undefined)
 })
 
