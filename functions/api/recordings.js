@@ -39,7 +39,14 @@ export function recordingHandler(makeClient = createClient, makeR2 = recordingR2
         if (!UUID.test(body.operation) || !UUID.test(body.frame) || !SHA256.test(body.hash) || !Number.isSafeInteger(body.bytes) || body.bytes < 1) return response({ error: 'Invalid recording reservation' }, 400)
         if (body.bytes > directReplayUploadLimit) return response({ error: 'Direct replay uploads must be 200 MB or less' }, 413)
         makeR2(env) // Validate the existing storage configuration before reserving.
-        return response(await rpc(actor, 'reserve_r2_frame_recording', { p_operation: body.operation, p_frame: body.frame, p_bytes: body.bytes, p_sha256: body.hash }))
+        const reservation = await actor.rpc('reserve_r2_frame_recording', {
+          p_operation: body.operation, p_frame: body.frame, p_bytes: body.bytes, p_sha256: body.hash,
+        })
+        if (reservation.error?.code === '55000' && reservation.error.message === 'replay_upload_quota_exceeded') {
+          return response({ code: 'recording_quota_reached', error: 'Recording limit reached.' }, 429)
+        }
+        if (reservation.error) throw Error('Recording authorization or state denied')
+        return response(reservation.data)
       }
       if (!['state', 'part', 'complete'].includes(body.action) || !UUID.test(body.upload)) return response({ error: 'Invalid operation' }, 400)
       let u = await rpc(actor, 'get_r2_frame_recording', { p_upload: body.upload })

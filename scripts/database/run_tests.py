@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sql-test', choices=['replay_lifecycle.sql','replay_cancellation.sql','r2_frame_recordings.sql','frame_replay_processing.sql','frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
+    parser.add_argument('--sql-test', choices=['replay_active_quota.sql','replay_lifecycle.sql','replay_cancellation.sql','r2_frame_recordings.sql','frame_replay_processing.sql','frame_replay_uploads.sql','frame_replays.sql','automatic_player_identity.sql','frame_correction_details.sql', 'guest_email.sql', 'frame_editing.sql', 'match_removal.sql', 'personal_performance.sql', 'frame_performance.sql'], help='Run only the selected focused SQL checks')
     parser.add_argument('--atomic-replay-release', action='store_true', help='Apply the generated atomic replay release bundle locally')
     parser.add_argument('--port', type=int, default=55439)
     parser.add_argument('--upgrade-foundation', action='store_true', help='Seed original two migrations, then upgrade existing synthetic history')
@@ -84,6 +84,20 @@ def main():
             file(ROOT/'supabase/tests/fixtures.sql')
         if args.sql_test:
             file(ROOT/'supabase/tests'/args.sql_test)
+            if args.sql_test == 'replay_active_quota.sql':
+                def reserve_last_slot(frame_number):
+                    try:
+                        sql("set role authenticated; set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';"
+                            "select app.reserve_r2_frame_recording(gen_random_uuid(),"
+                            "(select frame_id from test.upload_cases where n=%d),100,repeat('a',64))" % frame_number)
+                        return True
+                    except subprocess.CalledProcessError as error:
+                        assert 'replay_upload_quota_exceeded' in error.stderr, error.stderr
+                        return False
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    reserved = list(pool.map(reserve_last_slot, (10, 11)))
+                assert sum(reserved) == 1
+                sql("select test.ok(true,'concurrent reservations can only take one remaining slot after legacy cleanup')")
             if args.sql_test in ('r2_frame_recordings.sql', 'replay_lifecycle.sql'):
                 if args.sql_test == 'r2_frame_recordings.sql':
                     sql("select test.ok(true,'existing pre-R2 reservation identity and every original field preserved')")

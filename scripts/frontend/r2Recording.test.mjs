@@ -12,12 +12,13 @@ const env = { SUPABASE_URL: 'https://test.supabase.co', SUPABASE_PUBLISHABLE_KEY
 function setup() {
   const calls = []
   const u = { upload_id: upload, session_id: session, frame_id: frame, storage_path: key, source_provider: 'r2', status: 'reserved', expected_bytes: PART_BYTES + 123, source_sha256: hash, multipart_id: 'winner' }
-  let stored = null, parts = [], denied = false, invalidUser = false
+  let stored = null, parts = [], denied = false, invalidUser = false, reservationError
   const client = (_url, token) => ({
     auth: { getUser: async () => invalidUser ? { error: true, data: {} } : { data: { user: { id: actor } } } },
     rpc: async (name, args) => {
       calls.push({ name, args, token })
       if (denied) return { error: true }
+      if (name === 'reserve_r2_frame_recording' && reservationError) return { error: reservationError }
       if (name === 'confirm_r2_frame_recording') { u.status = 'committed'; return { data: { ...u, processing_status: 'uploaded' } } }
       if (name === 'bind_r2_frame_recording') return { data: 'winner' }
       return { data: { ...u } }
@@ -34,7 +35,7 @@ function setup() {
   const head = () => ({ bytes: u.expected_bytes, type: 'video/mp4', etag: 'etag', upload, actor, sha256: hash })
   const handler = recordingHandler(client, () => r2)
   const send = (body, origin = 'https://test.example') => handler({ env, request: new Request('https://test.example/api/recordings', { method: 'POST', headers: { Origin: origin, Authorization: 'Bearer caller', 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) })
-  return { calls, u, r2, head, send, setParts: p => { parts = p }, setHead: p => { stored = p }, deny: () => { denied = true }, invalidUser: () => { invalidUser = true } }
+  return { calls, u, r2, head, send, setParts: p => { parts = p }, setHead: p => { stored = p }, deny: () => { denied = true }, invalidUser: () => { invalidUser = true }, setReservationError: error => { reservationError = error } }
 }
 
 test('broker rejects untrusted origins, invalid accounts and authorization loss before R2 access', async () => {
@@ -51,6 +52,20 @@ test('the broker accepts exactly 200 MB and rejects larger reservations before t
   assert.equal(h.calls[0].args.p_bytes, directReplayUploadLimit)
   assert.equal((await h.send({ action: 'reserve', operation: upload, frame, bytes: directReplayUploadLimit + 1, hash })).status, 413)
   assert.equal(h.calls.length, 1)
+})
+test('only the database quota rejection gets a retryable quota response', async () => {
+  const h = setup()
+  const request = { action: 'reserve', operation: upload, frame, bytes: 100, hash }
+  h.setReservationError({ code: '55000', message: 'replay_upload_quota_exceeded' })
+  const blocked = await h.send(request)
+  assert.equal(blocked.status, 429)
+  assert.equal((await blocked.json()).code, 'recording_quota_reached')
+  assert.ok(h.calls.every(call => call.name === 'reserve_r2_frame_recording'))
+  h.setReservationError({ code: '55000', message: 'frame_upload_reserved' })
+  assert.equal((await h.send(request)).status, 409)
+  h.setReservationError(undefined)
+  assert.equal((await h.send(request)).status, 200)
+  assert.deepEqual(h.calls[0].args, h.calls[2].args)
 })
 test('oversized legacy sessions cannot list or sign parts or complete through the broker', async () => {
   const h = setup()

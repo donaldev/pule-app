@@ -1,5 +1,5 @@
 import { assertDirectReplayUploadSize } from '../replayUploadLimit.mjs'
-import { r2Command, r2RecordingEnabled, transferR2Recording } from './r2Recording'
+import { r2Command, r2RecordingEnabled, recordingQuotaMessage, transferR2Recording } from './r2Recording'
 import { Upload } from 'tus-js-client'
 import { actorAuthorization, getSupabase } from './supabase'
 import type { Database, FrameRecordingState, ReplayUploadStatus } from './database.types'
@@ -19,7 +19,7 @@ async function command<Name extends Commands>(userId: string, name: Name, args: 
   const authorization = await actorAuthorization(userId)
   const { data, error } = await getSupabase().rpc(name, args).setHeader('Authorization', authorization).retry(false).abortSignal(AbortSignal.timeout(20_000))
   if (error) {
-    if (error.message.includes('quota')) throw Error('The recording limit has been reached. Try again after old uploads have been cleaned up.')
+    if (error.code === '55000' && error.message === 'replay_upload_quota_exceeded') throw Error(recordingQuotaMessage)
     if (error.message.includes('reserved') || error.message.includes('replay_exists')) throw Error('This frame already has a recording or replay. Reopen its saved upload on the original device.')
     if (error.message.includes('object_not_verified')) throw Error('The recording is not fully stored yet. Resume upload, then check again.')
     if (error.code === '42501') throw Error('This account cannot attach a recording to this frame.')

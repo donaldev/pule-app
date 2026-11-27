@@ -2,6 +2,8 @@ import { assertDirectReplayUploadSize } from '../replayUploadLimit.mjs'
 import { actorAuthorization, getSupabase } from './supabase'
 import type { ReplayUploadStatus } from './database.types'
 
+export const recordingQuotaMessage = 'Recording limit reached. Keep this file or save the compressed copy, then resume when a recording slot is available.'
+
 export const r2RecordingEnabled = () => !!import.meta.env.VITE_RECORDING_UPLOAD_API_URL
 export async function r2Command(userId: string, body: Record<string, unknown>): Promise<unknown> {
   const url = new URL(import.meta.env.VITE_RECORDING_UPLOAD_API_URL)
@@ -9,6 +11,10 @@ export async function r2Command(userId: string, body: Record<string, unknown>): 
   const authorization = await actorAuthorization(userId)
   const response = await fetch(url, { method: 'POST', redirect: 'error', credentials: 'omit', headers: { Authorization: authorization, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) })
   if (response.status === 413) throw Error('Direct replay uploads are limited to 200 MB. Compress this video or choose a smaller MP4.')
+  if (response.status === 429) {
+    const result = await response.json().catch(() => null)
+    if (result?.code === 'recording_quota_reached') throw Error(recordingQuotaMessage)
+  }
   if (!response.ok) throw Error('Recording request could not be confirmed. Keep the same file and check status before retrying.')
   const result: unknown = await response.json()
   await actorAuthorization(userId)
