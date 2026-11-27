@@ -440,3 +440,48 @@ patch. Manual cue-ball repositioning can leave a real vacancy and pass both
 LAB checks. Local glare and other imaging changes can also create false
 evidence. Use the classifier to assign confidence and preserve candidates
 for review. See [Pule Shots in the product plan](PRODUCT_PLAN.md#pule-shots).
+
+
+### Phase 1 shot index and review state
+
+The worker captures the original motion candidates before padding merges
+them, maps each padded interval to the actual rendered video timestamps,
+and applies the frozen classifier above. A candidate is stored as `high`
+or `possible`. Possible shots remain available for future review. The index
+uses source frame ordinals and a source SHA-256 to carry decisions across
+rerenders of the same source. A different upload or changed detector
+boundaries can create different candidate identities. The full replay keeps
+the existing detector, padding, render settings, and original-source cleanup.
+
+The [local migration](../supabase/migrations/202611270001_frame_replay_shots.sql)
+adds private candidate and review tables and uses the existing replay
+publication transaction. The index can be empty for older replays or when
+source and render timestamps cannot be mapped safely. An unobservable
+candidate remains possible. The worker keeps classification within the
+existing processing budget and bounds native-frame buffering. Apply the
+migration before rolling out the worker so indexed publication is available.
+
+Read access follows full-replay visibility. Linked frame participants can
+accept, reject, restore, edit, and reset candidate bounds. A review revision
+guards against stale writes and supports immediate undo. A rejected shot is
+omitted from the active index used by future playback, review, favourites,
+highlights, and statistics. The review survives replay removal while the
+frame exists. Edits are stored separately in source time and remapped into
+the published segment. If a rerender cannot accommodate an edit, the
+original padded bounds are shown and the stored edit is marked for review.
+
+#### Footage available for boundary edits
+
+After cleanup, a shot can be extended only as far as the contiguous retained
+segment around it. An isolated candidate already uses the whole segment
+created by its lead-in and tail, so it has no extra footage at either edge.
+Candidates within a merged segment may have extra context on either side.
+Adjacent rendered segments may be contiguous in playback while separated by
+a gap in source time. Trims and extensions must stay in the same segment.
+The index records those limits and uses the existing replay for playback or
+on-demand exports, so individual shots require no extra stored videos.
+
+Start with those available bounds. If user review shows isolated shots need
+more context, measure the storage cost of adding short, bounded handles to
+the merged segments in the single replay. This would require a separate
+decision about replay padding. Keep current padding and retention for Phase 1.

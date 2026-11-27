@@ -75,9 +75,69 @@ select test.denied(format('select app.complete_frame_replay_processing(%L,%L,70,
 update private.player_account_links set player_id='30000000-0000-0000-0000-000000000001' where user_id='20000000-0000-0000-0000-000000000001';
 update app.group_memberships set status='active' where user_id='20000000-0000-0000-0000-000000000002';
 select test.denied(format('select app.complete_frame_replay_processing(%L,%L,71,5,1)',answer->>'job_id',answer->>'lease_id'),'55000','generated size mismatch denied') from test.processing_leases where n=1;
+create table test.shot_payload(payload jsonb);
+insert into test.shot_payload values ('[
+ {"candidate_key":"30:60","shot_number":1,"confidence":"high","motion_start_ms":1000,"motion_end_ms":2000,
+  "source_start_ms":0,"source_end_ms":3000,"replay_start_ms":0,"replay_end_ms":3000,
+  "segment_source_start_ms":0,"segment_source_end_ms":5000,"segment_replay_start_ms":0,"segment_replay_end_ms":5000},
+ {"candidate_key":"75:90","shot_number":2,"confidence":"possible","motion_start_ms":2500,"motion_end_ms":3000,
+  "source_start_ms":500,"source_end_ms":4000,"replay_start_ms":500,"replay_end_ms":4000,
+  "segment_source_start_ms":0,"segment_source_end_ms":5000,"segment_replay_start_ms":0,"segment_replay_end_ms":5000}
+]');
+grant select on test.shot_payload to service_role;
+select test.denied(format('select app.complete_frame_replay_with_shots(%L,%L,70,4,1,%L,%L)',
+ answer->>'job_id',answer->>'lease_id',repeat('a',64),payload),'22023','invalid shot index rolls back publication')
+ from test.processing_leases cross join test.shot_payload where n=1;
+select test.ok(not exists(select 1 from app.frame_replays),'bad index leaves no published replay');
 set role service_role;
-select test.ok(app.complete_frame_replay_processing((answer->>'job_id')::uuid,(answer->>'lease_id')::uuid,70,5,1)=app.complete_frame_replay_processing((answer->>'job_id')::uuid,(answer->>'lease_id')::uuid,70,5,1),'publication is idempotent') from test.processing_leases where n=1;
+select test.ok(app.complete_frame_replay_with_shots((answer->>'job_id')::uuid,(answer->>'lease_id')::uuid,
+ 70,5,1,repeat('a',64),payload)=app.complete_frame_replay_processing((answer->>'job_id')::uuid,
+ (answer->>'lease_id')::uuid,70,5,1),'indexed publication and legacy retry are idempotent')
+ from test.processing_leases cross join test.shot_payload where n=1;
 reset role;
+set role authenticated;
+do $$
+declare f uuid; path text; rows jsonb;
+begin
+ select frame_id into f from test.upload_cases where n=1;
+ rows:=app.list_frame_replay_shots(f);
+ path:=rows->0->>'storage_path';
+ perform test.ok(jsonb_array_length(rows)=2 and rows->1->>'confidence'='possible','overlapping candidates include possible shots');
+ perform test.ok(app.review_frame_replay_shot(f,path,'30:60',0,'edit',100,4000)=1,'shot boundaries can be trimmed and extended');
+ perform test.denied(format('select app.review_frame_replay_shot(%L,%L,%L,1,%L,100,5001)',f,path,'30:60','edit'),
+  '22023','edits cannot extend beyond the retained segment');
+ perform test.ok(app.review_frame_replay_shot(f,path,'30:60',1,'reject')=2,'rejection increments revision');
+ perform test.ok(jsonb_array_length(app.list_frame_replay_shots(f))=1,'rejection hides candidate');
+ perform test.denied(format('select app.review_frame_replay_shot(%L,%L,%L,1,%L)',f,path,'30:60','restore'),
+  '40001','stale undo cannot override a review');
+ perform test.ok(app.review_frame_replay_shot(f,path,'30:60',2,'restore')=3,'undo restores candidate');
+ rows:=app.list_frame_replay_shots(f);
+ perform test.ok(rows->0->>'effective_replay_end_ms'='4000' and rows->0->>'replay_end_ms'='3000',
+  'undo restores prior edit and preserves the original bound');
+ perform test.ok(app.review_frame_replay_shot(f,path,'30:60',3,'reject')=4,'a later rejection persists');
+end $$;
+set request.jwt.claim.sub='20000000-0000-0000-0000-000000000099';
+select test.ok(app.list_frame_replay_shots(frame_id)='[]','outsider cannot see the index') from test.upload_cases where n=1;
+set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';
+reset role;
+-- Simulate replacing a rendered index with the same candidate identities.
+begin;
+create temp table rerendered_candidates as select * from private.frame_replay_shots;
+delete from private.frame_replay_shots;
+insert into private.frame_replay_shots select * from rerendered_candidates;
+set local role authenticated;
+do $$
+declare f uuid; rows jsonb; path text;
+begin
+ select frame_id into f from test.upload_cases where n=1;
+ rows:=app.list_frame_replay_shots(f);
+ path:=rows->0->>'storage_path';
+ perform test.ok(jsonb_array_length(rows)=1 and rows->0->>'candidate_key'='75:90','same-source rerender keeps rejected shots hidden');
+ perform test.ok(app.review_frame_replay_shot(f,path,'30:60',4,'restore')=5,'rejection can be undone on the current render');
+ perform test.ok(app.list_frame_replay_shots(f)->0->>'effective_replay_end_ms'='4000','same-source rerender retains the edit');
+end $$;
+reset role;
+commit;
 select test.ok((select r.storage_path=l.answer->>'destination_key' from app.frame_replays r join test.upload_cases c on c.frame_id=r.frame_id join test.processing_leases l on l.n=1 where c.n=1),'only generated output registered');
 select test.ok(exists(select 1 from private.frame_replay_cleanup where bucket_id='frame-recordings'),'successful publication atomically schedules source cleanup');
 select test.ok(exists(select 1 from storage.objects where bucket_id='frame-recordings'),'publication does not SQL-delete Storage bytes');

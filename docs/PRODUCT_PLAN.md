@@ -394,9 +394,16 @@ The technical architecture is approved in principle. Review the expanded experie
 Classify the existing replay candidates using the frozen vacancy and LAB
 detector. Automatically include high-confidence shots and keep lower-confidence
 candidates available for optional manual review. Let users accept, reject, and
-restore individual candidates. Preserve stable candidate identities, raw source
-timestamps, replay timestamps, and padded clip boundaries. Full replay
-generation stays unchanged.
+undo an accidental rejection. Rejections persist across reprocessing of the
+same source and hide the shot from playback, review, favourites, highlights,
+and statistics. Keep only the candidate identity and decision state needed to
+preserve that rejection and restore any prior edits on undo.
+
+Keep original detected and padded boundaries alongside user-edited start and
+end times. Let users scrub the replay timeline, preview changes, and trim or
+extend a shot within its retained footage. Individual shots may overlap.
+Preserve review decisions, edits, and raw, padded, and rendered timestamps.
+Full replay generation stays unchanged.
 
 Use the index for shot navigation, favourites, My Shots, personal shot
 collections, player profile showcases, and match highlights. Generate

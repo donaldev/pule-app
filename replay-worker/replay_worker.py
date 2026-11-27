@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import http.client
 import json
 import math
@@ -185,9 +186,11 @@ def process_recording(source, job, work):
     corners = validate_corners(source, job)
     corner_path, output = work / 'corners.npy', work / 'replay.mp4'
     np.save(corner_path, corners)
+    motion = work / 'motion.json'
+    deadline = time.monotonic() + 1200
     command = [sys.executable, str(Path(__file__).with_name('replay_processor.py')),
                '--input', str(source), '--corners', str(corner_path), '--output', str(output),
-               '--workdir', str(work / 'detector')]
+               '--workdir', str(work / 'detector'), '--motion-manifest', str(motion)]
     child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     try:
         child.communicate(timeout=1200)
@@ -208,13 +211,43 @@ def process_recording(source, job, work):
         clips = list(csv.DictReader(manifest))
     if not 1 <= len(clips) <= 1000:
         raise ValueError('Invalid generated clip count')
+    shot_index = work / 'shot-index.json'
+    shots = None
+    remaining = deadline - time.monotonic()
+    if remaining > 1:
+        child = subprocess.Popen([sys.executable, str(Path(__file__).with_name('shot_index.py')),
+                                  str(source), str(corner_path), str(output), str(work / 'detector'),
+                                  str(motion), str(shot_index)],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        try:
+            child.communicate(timeout=remaining)
+        except (subprocess.TimeoutExpired, JobDeadlineExceeded) as error:
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            child.communicate()
+            if isinstance(error, JobDeadlineExceeded):
+                raise
+        # The mapper saves all candidates as possible before classification.
+        # That index remains available if the optional classifier runs out of time.
+        try:
+            shots = json.loads(shot_index.read_text())
+        except (OSError, ValueError):
+            pass
     if rotation:
         oriented = work / 'oriented-replay.mp4'
         subprocess.run(['ffmpeg', '-y', '-v', 'error', '-display_rotation:v:0', str(rotation), '-noautorotate', '-i', str(output), '-c', 'copy', str(oriented)],
                        check=True, capture_output=True, timeout=90)
         oriented.replace(output)
     verified = verify_video(output)
-    return output, {**verified, 'clip_count': len(clips)}
+    if shots and any(shot['segment_replay_end_ms'] > round(verified['duration_seconds']*1000)
+                     for shot in shots):
+        shots = None
+    if not shots:
+        print(json.dumps({'status': 'shot_index_unavailable'}))
+        shots = None
+    return output, {**verified, 'clip_count': len(clips), 'shots': shots}
 
 
 def verify_video(path):
@@ -267,8 +300,17 @@ def run_once(api, processor=process_recording, r2=None, seen=None):
             if actual['size_bytes'] != result['size_bytes']:
                 raise ValueError('Output changed after verification')
             api.upload(job['destination_key'], output)
-            api.rpc('complete_frame_replay_processing', {**args, 'p_bytes': actual['size_bytes'],
-                    'p_duration': actual['duration_seconds'], 'p_clips': result['clip_count']})
+            publication = {**args, 'p_bytes': actual['size_bytes'],
+                           'p_duration': actual['duration_seconds'], 'p_clips': result['clip_count']}
+            if result.get('shots') is not None:
+                source_hash = job.get('source_sha256')
+                if not source_hash:
+                    with source.open('rb') as recording:
+                        source_hash = hashlib.file_digest(recording, 'sha256').hexdigest()
+                api.rpc('complete_frame_replay_with_shots',
+                        {**publication, 'p_source_sha256': source_hash, 'p_shots': result['shots']})
+            else:
+                api.rpc('complete_frame_replay_processing', publication)
             # SQL queues source deletion atomically with publication. Never delete here.
             return {'job_id': job['job_id'], 'status': 'completed'}
     except Exception as exc:

@@ -38,7 +38,7 @@ def analysis_crop(corners, width, height):
     return x, y, w, h, analysis_width, analysis_height
 
 
-def select_clips(times: np.ndarray, scores: np.ndarray, duration: float) -> list[tuple[float, float]]:
+def select_clips(times: np.ndarray, scores: np.ndarray, duration: float, raw_shots=None) -> list[tuple[float, float]]:
     if len(times) != len(scores) or len(times) == 0:
         raise ValueError('Motion times and scores must be nonempty and equal length')
     window = max(1, round(SAMPLE_FPS * 0.2))
@@ -66,6 +66,8 @@ def select_clips(times: np.ndarray, scores: np.ndarray, duration: float) -> list
                 below_since = None
     if active:
         shots.append((start, duration))
+    if raw_shots is not None:
+        raw_shots.extend((float(start), float(stop)) for start, stop in shots)
     clips = []
     for start, stop in shots:
         a, b = max(0.0, float(start) - LEAD_IN), min(duration, float(stop) + TAIL)
@@ -76,7 +78,7 @@ def select_clips(times: np.ndarray, scores: np.ndarray, duration: float) -> list
     return clips
 
 
-def detect_clips(video: Path, corners_file: Path) -> tuple[list[tuple[float, float]], float]:
+def detect_clips(video: Path, corners_file: Path, timing=None) -> tuple[list[tuple[float, float]], float]:
     cap = cv2.VideoCapture(str(video))
     if not cap.isOpened():
         raise RuntimeError(f'Cannot open video: {video}')
@@ -130,7 +132,11 @@ def detect_clips(video: Path, corners_file: Path) -> tuple[list[tuple[float, flo
             scores.append(score)
             previous = gray
             frame_index += 1
-        return select_clips(np.asarray(times), np.asarray(scores, dtype=float), duration), duration
+        raw_shots = [] if timing is not None else None
+        clips = select_clips(np.asarray(times), np.asarray(scores, dtype=float), duration, raw_shots)
+        if timing is not None:
+            timing.update(shots=raw_shots, clips=clips, fps=fps, frame_count=frame_index, duration=duration)
+        return clips, duration
     finally:
         cap.release()
 
@@ -168,8 +174,10 @@ def main() -> None:
     parser.add_argument('--corners', type=Path, required=True, help='Table coordinates .npy from select_table.py')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--workdir', type=Path, required=True)
+    parser.add_argument('--motion-manifest', type=Path)
     args = parser.parse_args()
-    clips, duration = detect_clips(args.input, args.corners)
+    timing = {} if args.motion_manifest else None
+    clips, duration = detect_clips(args.input, args.corners, timing)
     args.workdir.mkdir(parents=True, exist_ok=True)
     with (args.workdir / 'candidate_clips.csv').open('w', newline='') as f:
         writer = csv.writer(f)
@@ -177,6 +185,8 @@ def main() -> None:
         for i, (start, end) in enumerate(clips, 1):
             writer.writerow([i, round(start, 2), round(end, 2), round(end-start, 2)])
     render_replay(args.input, clips, args.output, args.workdir)
+    if args.motion_manifest:
+        args.motion_manifest.write_text(json.dumps(timing))
     print(json.dumps({'status': 'completed', 'output': str(args.output),
                       'source_duration_seconds': round(duration, 2),
                       'replay_duration_seconds': round(sum(b-a for a, b in clips), 2),
