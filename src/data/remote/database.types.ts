@@ -27,7 +27,7 @@ export interface FrameRecordingState { frame_id: UUID; state: 'uploading' | 'pro
 export interface FrameReplay { frame_id: UUID; group_id: UUID; session_id: UUID; storage_path: string; created_at: string }
 export interface ReplayShot {
   storage_path: string; candidate_key: string; shot_number: number
-  confidence: 'high' | 'possible'; accepted: boolean; revision: number
+  confidence: 'high' | 'possible'; accepted: boolean; revision: number; favourite?: boolean
   source_start_ms: number; source_end_ms: number
   segment_source_start_ms: number; segment_source_end_ms: number
   segment_replay_start_ms: number; segment_replay_end_ms: number
@@ -85,6 +85,10 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      get_frame_replay_shot_workspace: { Args: { p_frame: UUID }; Returns: { shots: ReplayShot[]; rejected_count: number } | null }
+      set_frame_replay_shot_favourite: {
+        Args: { p_frame: UUID; p_path: string; p_candidate: string; p_favourite: boolean }; Returns: boolean
+      }
       list_frame_replay_shots: { Args: { p_frame: UUID }; Returns: ReplayShot[] }
       review_frame_replay_shot: {
         Args: { p_frame: UUID; p_path: string; p_candidate: string; p_revision: number; p_action: ReplayShotAction; p_start_ms?: number; p_end_ms?: number }

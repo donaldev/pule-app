@@ -75,10 +75,12 @@ export function Modal({
   title,
   children,
   onClose,
+  fullScreen = false,
 }: {
   title: string
   children: ReactNode
   onClose: () => void
+  fullScreen?: boolean
 }) {
   const titleId = useId()
   const ref = useRef<HTMLDialogElement>(null)
@@ -99,7 +101,7 @@ export function Modal({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
-      className="modal"
+      className={fullScreen ? "modal replay-screen" : "modal"}
     >
       <div className="flex items-center justify-between gap-4">
         <h2 id={titleId}>{title}</h2>

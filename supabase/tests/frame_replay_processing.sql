@@ -102,12 +102,20 @@ begin
  select frame_id into f from test.upload_cases where n=1;
  rows:=app.list_frame_replay_shots(f);
  path:=rows->0->>'storage_path';
+ perform test.ok(app.set_frame_replay_shot_favourite(f,path,'30:60',true),'visible ready shot can be favourited');
+ perform test.ok(app.get_frame_replay_shot_workspace(f)#>>'{shots,0,favourite}'='true','caller favourite is returned');
+ perform test.denied(format('select app.set_frame_replay_shot_favourite(%L,%L,%L,true)',f,path,'75:90'),
+  '42501','unreviewed possible shot cannot be favourited');
  perform test.ok(jsonb_array_length(rows)=2 and rows->1->>'confidence'='possible','overlapping candidates include possible shots');
  perform test.ok(app.review_frame_replay_shot(f,path,'30:60',0,'edit',100,4000)=1,'shot boundaries can be trimmed and extended');
  perform test.denied(format('select app.review_frame_replay_shot(%L,%L,%L,1,%L,100,5001)',f,path,'30:60','edit'),
   '22023','edits cannot extend beyond the retained segment');
  perform test.ok(app.review_frame_replay_shot(f,path,'30:60',1,'reject')=2,'rejection increments revision');
  perform test.ok(jsonb_array_length(app.list_frame_replay_shots(f))=1,'rejection hides candidate');
+ perform test.ok(app.get_frame_replay_shot_workspace(f)->>'rejected_count'='1'
+  and jsonb_array_length(app.get_frame_replay_shot_workspace(f)->'shots')=1,'workspace counts rejection without exposing the shot');
+ perform test.denied(format('select app.set_frame_replay_shot_favourite(%L,%L,%L,true)',f,path,'30:60'),
+  '42501','rejected shot cannot be favourited');
  perform test.denied(format('select app.review_frame_replay_shot(%L,%L,%L,1,%L)',f,path,'30:60','restore'),
   '40001','stale undo cannot override a review');
  perform test.ok(app.review_frame_replay_shot(f,path,'30:60',2,'restore')=3,'undo restores candidate');
@@ -118,6 +126,7 @@ begin
 end $$;
 set request.jwt.claim.sub='20000000-0000-0000-0000-000000000099';
 select test.ok(app.list_frame_replay_shots(frame_id)='[]','outsider cannot see the index') from test.upload_cases where n=1;
+select test.ok(app.get_frame_replay_shot_workspace(frame_id) is null,'outsider cannot see shot workspace') from test.upload_cases where n=1;
 set request.jwt.claim.sub='20000000-0000-0000-0000-000000000001';
 reset role;
 -- Simulate replacing a rendered index with the same candidate identities.
@@ -135,7 +144,11 @@ begin
  perform test.ok(jsonb_array_length(rows)=1 and rows->0->>'candidate_key'='75:90','same-source rerender keeps rejected shots hidden');
  perform test.ok(app.review_frame_replay_shot(f,path,'30:60',4,'restore')=5,'rejection can be undone on the current render');
  perform test.ok(app.list_frame_replay_shots(f)->0->>'effective_replay_end_ms'='4000','same-source rerender retains the edit');
+ perform test.ok(app.get_frame_replay_shot_workspace(f)#>>'{shots,0,favourite}'='true','undo restores visibility of the existing favourite');
 end $$;
+set local request.jwt.claim.sub='20000000-0000-0000-0000-000000000002';
+select test.ok(app.get_frame_replay_shot_workspace(frame_id)#>>'{shots,0,favourite}'='false',
+ 'another authorised participant does not inherit the favourite') from test.upload_cases where n=1;
 reset role;
 commit;
 select test.ok((select r.storage_path=l.answer->>'destination_key' from app.frame_replays r join test.upload_cases c on c.frame_id=r.frame_id join test.processing_leases l on l.n=1 where c.n=1),'only generated output registered');

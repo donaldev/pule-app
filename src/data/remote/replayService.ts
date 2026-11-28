@@ -101,3 +101,30 @@ export async function reviewReplayShot(userId: string, frameId: string, shot: Re
   if (error || typeof data !== 'number') throw Error('The review change could not be confirmed. Reload shots before trying again.')
   return data
 }
+
+export async function getReplayShotWorkspace(userId: string, frameId: string, path: string, signal: AbortSignal) {
+  const authorization = await actorAuthorization(userId)
+  const { data, error } = await getSupabase().rpc('get_frame_replay_shot_workspace', { p_frame: frameId })
+    .setHeader('Authorization', authorization).retry(false)
+    .abortSignal(AbortSignal.any([signal, AbortSignal.timeout(20_000)]))
+  await actorAuthorization(userId)
+  if (error?.code === 'PGRST202') return {
+    shots: await listReplayShots(userId, frameId, path, signal), rejectedCount: 0, favouritesAvailable: false,
+  }
+  if (error || (data && !Array.isArray(data.shots))) throw Error('Shots could not be loaded.')
+  return {
+    shots: data?.shots.filter(shot => shot.storage_path === path) ?? [],
+    rejectedCount: data?.rejected_count ?? 0,
+    favouritesAvailable: true,
+  }
+}
+
+export async function setReplayShotFavourite(userId: string, frameId: string, shot: ReplayShot, favourite: boolean) {
+  const authorization = await actorAuthorization(userId)
+  const { data, error } = await getSupabase().rpc('set_frame_replay_shot_favourite', {
+    p_frame: frameId, p_path: shot.storage_path, p_candidate: shot.candidate_key, p_favourite: favourite,
+  }).setHeader('Authorization', authorization).retry(false).abortSignal(AbortSignal.timeout(20_000))
+  await actorAuthorization(userId)
+  if (error || data !== favourite) throw Error('Could not update the favourite. Refresh shots and try again.')
+  return data
+}

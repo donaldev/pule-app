@@ -1,62 +1,83 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { ReplayShot, ReplayShotAction } from '../../data/remote/database.types'
-import { listReplayShots, reviewReplayShot } from '../../data/remote/replayService'
+import { getReplayShotWorkspace, reviewReplayShot, setReplayShotFavourite } from '../../data/remote/replayService'
 import { Icon } from '../../components/ui/Icon'
 import { ShotEditor } from './ShotEditor'
+import { ShotCollection } from './ShotCollection'
 import { replayBounds, shotTime, type ShotBounds } from './shotTimeline'
-
 import type { createReplayPlayback, PlaybackState } from './replayPlayback'
 
-const byReplayTime = (a: ReplayShot, b: ReplayShot) =>
-  a.effective_replay_start_ms - b.effective_replay_start_ms || a.shot_number - b.shot_number
+const boundsOf = (shot: ReplayShot): ShotBounds => ({ start: shot.effective_replay_start_ms, end: shot.effective_replay_end_ms })
 
-function ShotList({ items, selected, busy, onSelect }: {
-  items: ReplayShot[]; selected?: string; busy: boolean; onSelect: (shot: ReplayShot) => void
-}) {
-  return <ul className="shot-list">{items.map(shot => <li key={shot.candidate_key}>
-    <button type="button" disabled={busy} aria-pressed={selected === shot.candidate_key} onClick={() => onSelect(shot)}>
-      <Icon name="play" size={16} /><strong>Shot {shot.shot_number}</strong>
-      <span>{((shot.effective_replay_end_ms - shot.effective_replay_start_ms) / 1000).toFixed(1)}s</span>
-    </button>
-  </li>)}</ul>
-}
-
-export function ReplayShots({ userId, frameId, path, transport, playbackState, active, canReview }: {
-  userId: string; frameId: string; path: string
+export function ReplayShots({ userId, frameId, frameNumber, path, transport, playbackState,
+  active, canReview, duration, position, sign }: {
+  userId: string; frameId: string; frameNumber: number; path: string
   transport: RefObject<ReturnType<typeof createReplayPlayback> | null>
   playbackState: PlaybackState; active: boolean; canReview: boolean
+  duration: number; position: number; sign: () => Promise<string>
 }) {
   const [shots, setShots] = useState<ReplayShot[] | null>(null)
+  const [rejectedCount, setRejectedCount] = useState(0)
+  const [favouritesAvailable, setFavouritesAvailable] = useState(false)
   const [selected, setSelected] = useState<string>()
-  const [editing, setEditing] = useState(false)
+  const [mode, setMode] = useState<'view' | 'review' | 'edit'>('view')
   const [attempt, setAttempt] = useState(0)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [undo, setUndo] = useState<ReplayShot>()
   const [busy, setBusy] = useState(false)
   const saving = useRef(false)
-  const selection = useRef<HTMLHeadingElement>(null)
-  const undoButton = useRef<HTMLButtonElement>(null)
-  const status = useRef<HTMLParagraphElement>(null)
+  const heading = useRef<HTMLHeadingElement>(null)
+  const exporter = useRef<AbortController>(null)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
-    listReplayShots(userId, frameId, path, controller.signal).then(rows => {
-      if (!controller.signal.aborted) setShots(rows)
+    getReplayShotWorkspace(userId, frameId, path, controller.signal).then(result => {
+      if (controller.signal.aborted) return
+      setShots(result.shots)
+      setRejectedCount(result.rejectedCount)
+      setFavouritesAvailable(result.favouritesAvailable)
     }).catch(() => {
       if (!controller.signal.aborted) setError('Shots could not be loaded.')
     })
     return () => controller.abort()
   }, [userId, frameId, path, attempt])
+  useEffect(() => () => exporter.current?.abort(), [])
 
-  const timeline = shots?.toSorted(byReplayTime) ?? []
-  const accepted = timeline.filter(shot => shot.confidence === 'high' || shot.accepted)
-  const possible = timeline.filter(shot => shot.confidence === 'possible' && !shot.accepted)
-  const current = shots?.find(shot => shot.candidate_key === selected)
-  const playlist = current?.confidence === 'possible' && !current.accepted ? possible : accepted
-  const index = playlist.findIndex(shot => shot.candidate_key === selected)
-  const currentBounds = current && {
-    start: current.effective_replay_start_ms, end: current.effective_replay_end_ms,
+  const original = useMemo(() => shots?.toSorted((a, b) => a.shot_number - b.shot_number) ?? [], [shots])
+  const ready = useMemo(() => original.filter(s => s.confidence === 'high' || s.accepted)
+    .sort((a, b) => boundsOf(a).start - boundsOf(b).start || a.shot_number - b.shot_number), [original])
+  const reviewing = mode !== 'view'
+  const playlist = reviewing ? original : ready
+  const current = playlist.find(shot => shot.candidate_key === selected)
+  const index = current ? playlist.indexOf(current) : -1
+  const outstanding = original.filter(shot => !shot.accepted).length
+  const reviewed = original.length + rejectedCount - outstanding
+  const total = original.length + rejectedCount
+  const replayEnd = duration || Math.max(1, ...ready.map(shot => boundsOf(shot).end))
+
+  function select(shot: ReplayShot | undefined, play = true) {
+    setSelected(shot?.candidate_key)
+    if (!shot) { transport.current?.stop(); return }
+    const bounds = boundsOf(shot)
+    transport.current?.seek(bounds.start, play ? bounds.end : undefined)
+  }
+
+  function startReview() {
+    cancelExport()
+    setMode('review')
+    setMessage('')
+    select(original.find(s => !s.accepted) ?? original[0], false)
+    requestAnimationFrame(() => heading.current?.focus())
+  }
+
+  function finishReview() {
+    setMode('view')
+    setUndo(undefined)
+    setMessage('')
+    select(ready.find(s => s.candidate_key === selected) ?? ready[0], false)
+    requestAnimationFrame(() => heading.current?.focus())
   }
 
   function reload() {
@@ -66,15 +87,8 @@ export function ReplayShots({ userId, frameId, path, transport, playbackState, a
     setShots(null)
     setUndo(undefined)
     setSelected(undefined)
-    setEditing(false)
+    setMode('view')
     setAttempt(n => n + 1)
-  }
-
-  function select(shot: ReplayShot) {
-    setSelected(shot.candidate_key)
-    setEditing(false)
-    transport.current?.seek(shot.effective_replay_start_ms, shot.effective_replay_end_ms)
-    requestAnimationFrame(() => selection.current?.focus())
   }
 
   async function review(shot: ReplayShot, action: ReplayShotAction, bounds?: ShotBounds) {
@@ -85,34 +99,37 @@ export function ReplayShots({ userId, frameId, path, transport, playbackState, a
     setMessage('')
     try {
       const revision = await reviewReplayShot(userId, frameId, shot, action, bounds)
+      const updated = { ...shot, revision }
       if (action === 'reject') {
-        transport.current?.stop()
-        setEditing(false)
-        setSelected(undefined)
-        setUndo({ ...shot, revision })
+        setUndo(updated)
+        setRejectedCount(count => count + 1)
         setShots(rows => rows?.filter(row => row.candidate_key !== shot.candidate_key) ?? [])
-        requestAnimationFrame(() => undoButton.current?.focus())
+        setMessage('Shot rejected.')
       } else if (action === 'restore') {
-        setShots(rows => [...(rows ?? []).filter(row => row.candidate_key !== shot.candidate_key), { ...shot, revision }])
+        setShots(rows => [...(rows ?? []), updated])
+        setRejectedCount(count => Math.max(0, count - 1))
         setUndo(undefined)
-        setMessage(`Shot ${shot.shot_number} restored.`)
-        requestAnimationFrame(() => status.current?.focus())
+        select(updated, false)
+        setMessage('Shot restored.')
       } else if (action === 'edit' && bounds) {
         const replay = replayBounds(shot, bounds)
         setShots(rows => rows?.map(row => row.candidate_key === shot.candidate_key ? {
-          ...row, revision, edit_needs_review: false,
+          ...updated, edit_needs_review: false,
           edited_source_start_ms: bounds.start, edited_source_end_ms: bounds.end,
           effective_replay_start_ms: replay.start, effective_replay_end_ms: replay.end,
         } : row) ?? [])
+        setMode('review')
         transport.current?.seek(replay.start)
-        setEditing(false)
         setMessage('Shot boundaries saved.')
-        requestAnimationFrame(() => selection.current?.focus())
-      } else {
-        setShots(rows => rows?.map(row => row.candidate_key === shot.candidate_key ? { ...row, revision, accepted: true } : row) ?? [])
-        setMessage(`Shot ${shot.shot_number} accepted.`)
-        requestAnimationFrame(() => selection.current?.focus())
+      } else if (action === 'accept') {
+        setShots(rows => rows?.map(row => row.candidate_key === shot.candidate_key ? { ...updated, accepted: true } : row) ?? [])
+        setMessage('Shot kept.')
       }
+      if (action === 'accept' || action === 'reject') {
+        const later = original.filter(row => row.shot_number > shot.shot_number)
+        select(later[0] ?? original.find(row => row.candidate_key !== shot.candidate_key && !row.accepted), false)
+      }
+      requestAnimationFrame(() => heading.current?.focus())
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The review change could not be confirmed.')
     } finally {
@@ -121,51 +138,134 @@ export function ReplayShots({ userId, frameId, path, transport, playbackState, a
     }
   }
 
+  async function favourite(shot: ReplayShot) {
+    if (saving.current) return
+    saving.current = true
+    setBusy(true)
+    setError('')
+    try {
+      const value = await setReplayShotFavourite(userId, frameId, shot, !shot.favourite)
+      setShots(rows => rows?.map(row => row.candidate_key === shot.candidate_key ? { ...row, favourite: value } : row) ?? [])
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not update favourite.')
+    } finally {
+      saving.current = false
+      setBusy(false)
+    }
+  }
 
-  return <div hidden={!active} className="replay-shots">
+  async function download(shot: ReplayShot, number: number) {
+    if (exporter.current) return
+    const controller = new AbortController()
+    exporter.current = controller
+    setExporting(true)
+    setError('')
+    try {
+      const workspace = await getReplayShotWorkspace(userId, frameId, path, controller.signal)
+      const saved = workspace.shots.find(row => row.candidate_key === shot.candidate_key && (row.confidence === 'high' || row.accepted))
+      if (!saved) throw Error('This shot is no longer available. Reload shots to continue.')
+      const media = await import('./shotMedia')
+      const clip = await media.extractShot(await sign(), boundsOf(saved), controller.signal)
+      const url = URL.createObjectURL(clip)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `Pule_Frame_${frameNumber}_Shot_${number}.mp4`
+      document.body.append(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 30_000)
+    } catch (reason) {
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Could not save this shot.')
+    } finally {
+      exporter.current = null
+      if (!controller.signal.aborted) setExporting(false)
+    }
+  }
+
+  function cancelExport() {
+    exporter.current?.abort()
+    setExporting(false)
+  }
+
+  const number = index + 1
+  return <section hidden={!active} className="replay-workspace" aria-label={reviewing ? 'Shot review' : 'Shots'}>
     {error && <div className="shot-feedback"><p role="alert">{error}</p>
       <button type="button" className="button button-secondary" disabled={busy} onClick={reload}>Reload shots</button></div>}
     {!shots && !error && <p role="status">Loading shots…</p>}
-    {message && <p role="status" tabIndex={-1} ref={status}>{message}</p>}
-    {undo && <div className="shot-feedback"><p role="status">Shot {undo.shot_number} rejected.</p>
-      <button type="button" className="button button-secondary" ref={undoButton} disabled={busy || !shots}
-        onClick={() => void review(undo, 'restore')}>Undo</button></div>}
-    {shots?.length === 0 && <p>No shots are available for this replay.</p>}
-    {current && currentBounds && (editing ? <ShotEditor key={current.candidate_key} shot={current} busy={busy}
+    {shots && !total && <p>No shots are available for this replay.</p>}
+    {mode === 'edit' && current ? <ShotEditor key={current.candidate_key} shot={current} number={number} busy={busy}
       onScrub={ms => transport.current?.seek(ms, undefined, true)} onPreview={bounds => transport.current?.seek(bounds.start, bounds.end)}
-      onSave={bounds => void review(current, 'edit', bounds)}
-      onCancel={() => {
-        transport.current?.seek(currentBounds.start)
-        setEditing(false)
-        requestAnimationFrame(() => selection.current?.focus())
-      }} /> : <section className="shot-selected">
-      <h3 ref={selection} tabIndex={-1}>Shot {current.shot_number}</h3>
-      <p>{shotTime(currentBounds.start)} – {shotTime(currentBounds.end)}</p>
-      <div className="shot-transport">
+      onSave={bounds => void review(current, 'edit', bounds)} onCancel={() => {
+        select(current, false)
+        setMode('review')
+      }} /> : <>
+      {!!total && <header className="shot-workspace-heading">
+        <div>
+          <h3 ref={heading} tabIndex={-1}>{reviewing ? 'Review shots' : current ? `Shot ${number}` : 'Shots'}</h3>
+          <p>{reviewing ? `${reviewed} of ${total} reviewed` : `${ready.length} ready${canReview && outstanding ? ` · ${outstanding} to review` : ''}`}</p>
+        </div>
+        {canReview && !reviewing && !!original.length && <button type="button" className="button button-secondary"
+          onClick={startReview}>{outstanding ? 'Review Shots' : 'Edit Shots'}</button>}
+      </header>}
+
+      {current && reviewing && <p className="shot-review-position">
+        Candidate {current.shot_number} <span>{current.accepted ? 'Kept' : current.confidence === 'high' ? 'High confidence' : 'Possible shot'}</span>
+      </p>}
+      {!!shots?.length && <div className="shot-transport">
         <button type="button" className="button button-secondary" disabled={busy || index <= 0}
           onClick={() => select(playlist[index - 1])}>Previous</button>
-        <button type="button" className="button" disabled={!playbackState.ready} onClick={() => transport.current?.toggle(currentBounds)}>
+        <button type="button" className="button" disabled={!playbackState.ready || !playlist.length}
+          onClick={() => current ? transport.current?.toggle(boundsOf(current)) : select(playlist[0])}>
           {playbackState.playing ? 'Pause' : 'Play shot'}
         </button>
         <button type="button" className="button button-secondary" disabled={busy || index >= playlist.length - 1}
           onClick={() => select(playlist[index + 1])}>Next</button>
-      </div>
-      {canReview && <div className="shot-actions">
-        {current.confidence === 'possible' && !current.accepted && <button type="button" className="button" disabled={busy}
-          onClick={() => void review(current, 'accept')}>Accept</button>}
-        <button type="button" className="button button-secondary" disabled={busy || !playbackState.ready}
-          onClick={() => { transport.current?.seek(currentBounds.start); setEditing(true) }}>Edit boundaries</button>
-        <button type="button" className="button button-secondary" disabled={busy}
-          onClick={() => void review(current, 'reject')}>Reject</button>
       </div>}
-    </section>)}
-    {!!shots?.length && !editing && <>
-      <section aria-label="Ready shots"><h3>Ready shots</h3>
-        {accepted.length ? <ShotList items={accepted} selected={selected} busy={busy} onSelect={select} /> : <p>No ready shots yet.</p>}
-      </section>
-      <section aria-label="Possible shots" className="shot-possible"><h3>Possible shots <span>{possible.length} to review</span></h3>
-        {possible.length > 0 && <ShotList items={possible} selected={selected} busy={busy} onSelect={select} />}
-      </section>
+
+      {reviewing ? <>
+        {current && <div className="shot-actions shot-review-actions">
+          <button type="button" className="button" disabled={busy} onClick={() => void review(current, 'accept')}>Keep</button>
+          <button type="button" className="button button-secondary" disabled={busy} onClick={() => void review(current, 'reject')}>Reject</button>
+          <button type="button" className="button button-secondary" disabled={busy || !playbackState.ready}
+            onClick={() => { select(current, false); setMode('edit') }}>Edit Boundaries</button>
+        </div>}
+        {!current && <p>{outstanding ? 'Choose Next to continue reviewing.' : 'All candidates have been reviewed.'}</p>}
+        <div className="shot-review-finish">
+          <p role="status">{message || 'Choices are saved as you go.'}</p>
+          {undo && <button type="button" className="button button-secondary" disabled={busy}
+            onClick={() => void review(undo, 'restore')}>Undo rejection</button>}
+          <button type="button" className="button button-secondary" disabled={busy} onClick={finishReview}>Save and Finish Review</button>
+        </div>
+      </> : <>
+        {!!ready.length && <div className="shot-replay-timeline">
+          <label className="shot-range"><span>Replay timeline <strong>{shotTime(position)}</strong></span>
+            <input type="range" min={0} max={replayEnd} value={Math.min(position, replayEnd)}
+              aria-valuetext={shotTime(position)} onChange={event => transport.current?.seek(event.currentTarget.valueAsNumber, undefined, true)} />
+          </label>
+          <button type="button" className="shot-markers" aria-label="Jump to a shot marker. Use previous and next to choose a shot."
+            title="Jump to nearest shot" onClick={event => {
+              if (!event.detail) { select(ready[(index + 1) % ready.length]); return }
+              const rect = event.currentTarget.getBoundingClientRect()
+              const point = (event.clientX - rect.left) / rect.width * replayEnd
+              select(ready.reduce((nearest, shot) => Math.abs(boundsOf(shot).start - point) < Math.abs(boundsOf(nearest).start - point) ? shot : nearest))
+            }}>
+            {ready.map(shot => <i key={shot.candidate_key} data-selected={shot.candidate_key === selected}
+              style={{ left: `${100 * boundsOf(shot).start / replayEnd}%` }} />)}
+          </button>
+        </div>}
+        {current && <div className="shot-actions shot-view-actions">
+          {favouritesAvailable && <button type="button" className="button button-secondary" disabled={busy}
+            aria-pressed={!!current.favourite} onClick={() => void favourite(current)}>
+            {current.favourite ? '★ Favourited' : '☆ Favourite'}
+          </button>}
+          <button type="button" className="button button-secondary" disabled={exporting}
+            onClick={() => void download(current, number)}><Icon name="download" size={16} />Download Shot</button>
+          {exporting && <button type="button" className="button button-secondary" onClick={cancelExport}>Cancel export</button>}
+          {exporting && <p role="status">Preparing shot…</p>}
+        </div>}
+        {!!ready.length && active && <ShotCollection shots={ready} selected={selected} onSelect={select} sign={sign} />}
+        {!!total && !ready.length && <p>No shots are ready to watch yet.</p>}
+      </>}
     </>}
-  </div>
+  </section>
 }

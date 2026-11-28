@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from '../../components/ui/Icon'
 import { Modal } from '../../components/ui/Primitives'
 import type { ReplayMatch } from '../../data/remote/database.types'
@@ -54,23 +54,25 @@ export function ReplayViewer({ userId, replay, description, onClose, onDeleted }
   const [openedShots, setOpenedShots] = useState(false)
   const [playback, setPlayback] = useState<PlaybackState>({ ready: false, playing: false, message: 'Opening replay…', error: '' })
   const transport = useRef<ReturnType<typeof createReplayPlayback> | null>(null)
-  const [videoSize, setVideoSize] = useState<{ width: number; height: number }>()
+  const [duration, setDuration] = useState(0)
+  const [position, setPosition] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [removalMessage, setRemovalMessage] = useState('')
   const video = useRef<HTMLVideoElement>(null)
   const path = replay.storage_path
+  const sign = useCallback(() => signFrameReplay(userId, { storage_path: path }), [userId, path])
 
   useEffect(() => {
     const element = video.current!
-    const controller = createReplayPlayback(element, () => signFrameReplay(userId, { storage_path: path }),
+    const controller = createReplayPlayback(element, sign,
       replayPlaybackLinkSeconds * 1000, setPlayback)
     transport.current = controller
     return () => {
       transport.current = null
       controller.destroy()
     }
-  }, [userId, path])
+  }, [sign])
 
   function close() {
     transport.current?.stop()
@@ -92,7 +94,7 @@ export function ReplayViewer({ userId, replay, description, onClose, onDeleted }
   }
 
   return <>
-    <Modal title={`Frame ${replay.frame_number} replay`} onClose={close}>
+    <Modal title={`Frame ${replay.frame_number} replay`} onClose={close} fullScreen>
       <div className={`replay-player${showShots ? ' replay-player-shots' : ''}`}>
         <div className="replay-view-switch" aria-label="Replay view" role="group">
           <button type="button" aria-pressed={!showShots} onClick={() => { transport.current?.stop(); setShowShots(false) }}>Full replay</button>
@@ -105,19 +107,16 @@ export function ReplayViewer({ userId, replay, description, onClose, onDeleted }
         <div className="replay-media">
           {description && <p className="replay-context">{description}</p>}
           {playback.message && <p role="status">{playback.message}</p>}
-          <video ref={video} data-opening={!videoSize && !playback.ready ? true : undefined} controls={!showShots && playback.ready} playsInline preload="metadata"
-            data-portrait={videoSize && videoSize.height > videoSize.width ? 'true' : undefined}
-            style={videoSize ? { aspectRatio: `${videoSize.width} / ${videoSize.height}`, width: `min(100%, calc((100dvh - 230px) * ${videoSize.width / videoSize.height}))` } : undefined}
-            onLoadedMetadata={e => {
-              const v = e.currentTarget
-              if (v.videoWidth > 0 && v.videoHeight > 0) setVideoSize({ width: v.videoWidth, height: v.videoHeight })
-            }}
+          <video ref={video} controls={!showShots && playback.ready} playsInline preload="metadata"
+            onLoadedMetadata={e => setDuration(Math.round(e.currentTarget.duration * 1000) || 0)}
+            onTimeUpdate={e => setPosition(Math.round(e.currentTarget.currentTime * 1000))}
             aria-label={`Frame ${replay.frame_number} replay`} />
           {playback.error && <><p role="alert">{playback.error}</p>
             <button type="button" className="button" onClick={() => transport.current?.retry()}>Retry playback</button></>}
         </div>
         {openedShots && <ReplayShots userId={userId} frameId={replay.frame_id} path={path} transport={transport}
-          playbackState={playback} active={showShots} canReview={!!onDeleted} />}
+          playbackState={playback} active={showShots} canReview={!!onDeleted}
+          duration={duration} position={position} sign={sign} frameNumber={replay.frame_number} />}
         {!showShots && <footer className="replay-player-actions">
           <ReplayDownload userId={userId} replay={replay} />
           {onDeleted && <button type="button" className="button button-secondary replay-delete"

@@ -10,6 +10,7 @@ const React={createElement:(type,props,...children)=>({type,props:props??{},chil
 const Icon='Icon',Modal='Modal',MatchDisclosureHeading='Disclosure',MatchRecordingPicker='MatchRecordingPicker',RecordingUploadAction='RecordingUploadAction';
 const useState=initial=>{const h=globalThis.archive,i=h.cursor++;if(!(i in h.states))h.states[i]=typeof initial==='function'?initial():initial;return [h.states[i],next=>h.states[i]=typeof next==='function'?next(h.states[i]):next]};
 const useId=()=> 'replay-list';
+const useCallback=(fn,deps)=>{const i=globalThis.archive.cursor++;const prior=archive.states[i];if(prior&&deps.every((v,j)=>v===prior.deps[j]))return prior.fn;archive.states[i]={fn,deps};return fn;};
 const useRef=initial=>{const h=globalThis.archive,i=h.cursor++;return h.states[i]??(h.states[i]={current:initial})};
 const useEffect=(fn,deps)=>{const h=globalThis.archive;if(!h.inViewer)return;if(!h.viewerDeps||deps.some((v,i)=>v!==h.viewerDeps[i])){h.viewerCleanup?.();h.viewerDeps=deps;h.viewerCleanup=fn()}};
 const downloadFrameReplay=async()=>{};
@@ -60,14 +61,12 @@ test('empty, one and 40-frame archives count only loaded published replays; add 
  }
  const render=setup([],1,false);assert.equal(find(render(),n=>n.type==='RecordingUploadAction'),undefined)
 })
-test('replay opens exact source, respects metadata aspect ratio, confirmation and deletion authorization',async()=>{
+test('replay opens full-screen with the exact source and preserves deletion authorization',async()=>{
  const render=setup([replay(1)]);let tree=render()
  button(tree,'Watch replay').props.onClick();render();await tick();tree=render()
  assert.deepEqual(archive.signed,[['account','session/frame-1.mp4']])
  let video=find(tree,n=>n.type==='video');assert.equal(video.props.controls,true);assert.equal(video.props.playsInline,true)
- for(const [width,height] of [[576,1024],[1920,1080]]) {
-  video.props.onLoadedMetadata({currentTarget:{videoWidth:width,videoHeight:height}});tree=render();video=find(tree,n=>n.type==='video');assert.equal(video.props.style.aspectRatio,`${width} / ${height}`)
- }
+ assert.equal(find(tree,n=>n.type==='Modal'&&n.props.title==='Frame 1 replay').props.fullScreen,true)
  button(tree,'Delete Replay').props.onClick();tree=render();assert.equal(archive.removed.length,0)
  button(tree,'Keep replay').props.onClick();tree=render();assert.equal(find(tree,n=>n.type==='Modal'&&n.props.title.startsWith('Delete replay')),undefined)
  button(tree,'Delete Replay').props.onClick();tree=render();await button(tree,'Delete video').props.onClick();tree=render()

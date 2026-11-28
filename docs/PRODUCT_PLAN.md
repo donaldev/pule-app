@@ -405,10 +405,20 @@ extend a shot within its retained footage. Individual shots may overlap.
 Preserve review decisions, edits, and raw, padded, and rendered timestamps.
 Full replay generation stays unchanged.
 
-Use the index for shot navigation, favourites, My Shots, personal shot
-collections, player profile showcases, and match highlights. Generate
-individual shot downloads on demand from the existing replay to avoid
-duplicating stored video.
+Open replays in a full-screen workspace with Full Replay and Shots views.
+The finished Shots view shows chronological thumbnails, timeline markers and
+gap-free display numbers. Saved shot identities remain stable. Keep review
+actions in a separate workspace where eligible participants can step through
+high-confidence and possible candidates in their original order. Keep and
+Reject save immediately and advance. Review can be left and resumed, with
+undecided possible shots held for later. Boundary editing shares the player
+and shows the retained footage available for trimming and extension.
+
+Store favourites per account on the existing shot identity. Export individual
+clips from the saved edited replay bounds on demand. Reuse encoded packets
+when the edges align, and encode the trimmed range on compatible devices
+otherwise. Keep the published replay as the only stored video. My Shots,
+personal collections, player showcases and highlights remain future work.
 
 The repeat review measured 90.0% precision and 75.0% recall. On a different
 frame, precision was 84.6% and recall was 78.6%, with 17 of 19 false positives

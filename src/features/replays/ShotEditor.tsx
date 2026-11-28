@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { ReplayShot } from '../../data/remote/database.types'
 import { editableRange, replayBounds, shotTime, type ShotBounds } from './shotTimeline'
 
-export function ShotEditor({ shot, busy, onScrub, onPreview, onSave, onCancel }: {
+export function ShotEditor({ shot, number, busy, onScrub, onPreview, onSave, onCancel }: {
   shot: ReplayShot
+  number: number
   busy: boolean
   onScrub: (ms: number) => void
   onPreview: (bounds: ShotBounds) => void
@@ -11,6 +12,7 @@ export function ShotEditor({ shot, busy, onScrub, onPreview, onSave, onCancel }:
   onCancel: () => void
 }) {
   const heading = useRef<HTMLHeadingElement>(null)
+  const rail = useRef<HTMLDivElement>(null)
   useEffect(() => { heading.current?.focus() }, [])
   const range = editableRange(shot)
   const [bounds, setBounds] = useState(() => {
@@ -37,13 +39,25 @@ export function ShotEditor({ shot, busy, onScrub, onPreview, onSave, onCancel }:
     scrub(value)
   }
 
-  return <section className="shot-editor" aria-label={`Edit shot ${shot.shot_number}`}>
-    <h3 ref={heading} tabIndex={-1}>Edit shot {shot.shot_number}</h3>
+  return <section className="shot-editor" aria-label={`Edit shot ${number}`}>
+    <h3 ref={heading} tabIndex={-1}>Edit shot {number}</h3>
     {shot.edit_needs_review && <p role="status">The saved edit falls outside this replay. Adjust the available boundaries to save a new edit.</p>}
-    <div className="shot-timeline" aria-hidden="true" style={{
+    <div className="shot-timeline shot-trim-rail" ref={rail} aria-hidden="true" style={{
       '--shot-start': `${percent(bounds.start)}%`, '--shot-end': `${percent(bounds.end)}%`,
       '--shot-position': `${percent(position)}%`,
-    } as CSSProperties}><span /></div>
+    } as CSSProperties}><span />
+      {(['start', 'end'] as const).map(edge => <button key={edge} type="button" tabIndex={-1}
+        className={`shot-trim-handle shot-trim-${edge}`} disabled={busy}
+        onPointerDown={event => {
+          event.preventDefault()
+          event.currentTarget.setPointerCapture(event.pointerId)
+        }}
+        onPointerMove={event => {
+          if (!event.currentTarget.hasPointerCapture(event.pointerId) || !rail.current) return
+          const rect = rail.current.getBoundingClientRect()
+          moveBoundary(edge, Math.round(range.start + (event.clientX - rect.left) / rect.width * (range.end - range.start)))
+        }} />)}
+    </div>
     <label className="shot-range"><span>Scrub retained footage <strong>{time(position)}</strong></span>
       <input type="range" min={range.start} max={range.end} value={position}
         aria-valuetext={time(position)} onChange={e => scrub(e.currentTarget.valueAsNumber)} />
