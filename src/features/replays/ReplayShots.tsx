@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import type { ReplayShot, ReplayShotAction } from '../../data/remote/database.types'
 import { getReplayShotWorkspace, reviewReplayShot, setReplayShotFavourite } from '../../data/remote/replayService'
 import { Icon } from '../../components/ui/Icon'
@@ -10,11 +11,13 @@ import type { createReplayPlayback, PlaybackState } from './replayPlayback'
 const boundsOf = (shot: ReplayShot): ShotBounds => ({ start: shot.effective_replay_start_ms, end: shot.effective_replay_end_ms })
 
 export function ReplayShots({ userId, frameId, frameNumber, path, transport, playbackState,
-  active, canReview, duration, position, sign }: {
+  active, canReview, duration, position, sign, overlay, onReviewing, swipe }: {
   userId: string; frameId: string; frameNumber: number; path: string
   transport: RefObject<ReturnType<typeof createReplayPlayback> | null>
   playbackState: PlaybackState; active: boolean; canReview: boolean
   duration: number; position: number; sign: () => Promise<string>
+  overlay: HTMLDivElement | null; onReviewing: (reviewing: boolean) => void
+  swipe: RefObject<((direction: number) => void) | null>
 }) {
   const [shots, setShots] = useState<ReplayShot[] | null>(null)
   const [rejectedCount, setRejectedCount] = useState(0)
@@ -57,12 +60,23 @@ export function ReplayShots({ userId, frameId, frameNumber, path, transport, pla
   const total = original.length + rejectedCount
   const replayEnd = duration || Math.max(1, ...ready.map(shot => boundsOf(shot).end))
 
-  function select(shot: ReplayShot | undefined, play = true) {
+  const select = useCallback((shot: ReplayShot | undefined, play = true) => {
     setSelected(shot?.candidate_key)
     if (!shot) { transport.current?.stop(); return }
     const bounds = boundsOf(shot)
     transport.current?.seek(bounds.start, play ? bounds.end : undefined)
-  }
+  }, [transport])
+
+  useEffect(() => { onReviewing(reviewing) }, [onReviewing, reviewing])
+
+  useEffect(() => {
+    if (!active || reviewing || !overlay || busy) return
+    swipe.current = direction => {
+      const shot = playlist[index < 0 ? 0 : index + direction]
+      if (shot) select(shot)
+    }
+    return () => { swipe.current = null }
+  }, [active, reviewing, overlay, busy, index, playlist, swipe, select])
 
   function startReview() {
     cancelExport()
@@ -188,7 +202,43 @@ export function ReplayShots({ userId, frameId, frameNumber, path, transport, pla
   }
 
   const number = index + 1
+  const actions = current && <div className="shot-actions shot-view-actions">
+          {favouritesAvailable && <button type="button" className="button button-secondary" disabled={busy}
+            aria-pressed={!!current.favourite} onClick={() => void favourite(current)}>
+            {current.favourite ? '★ Favourited' : '☆ Favourite'}
+          </button>}
+          <button type="button" className="button button-secondary" disabled={exporting}
+            onClick={() => void download(current, number)}><Icon name="download" size={16} />Download Shot</button>
+          {exporting && <button type="button" className="button button-secondary" onClick={cancelExport}>Cancel export</button>}
+          {exporting && <p role="status">Preparing shot…</p>}
+        </div>
+  const immersiveBounds = current && boundsOf(current)
+  const immersiveControls = active && overlay && !reviewing && createPortal(
+    <div className="replay-overlay-content">
+      {immersiveBounds && <label className="shot-range"><span>Shot timeline</span>
+        <input type="range" min={immersiveBounds.start} max={immersiveBounds.end}
+          value={Math.max(immersiveBounds.start, Math.min(position, immersiveBounds.end))}
+          disabled={!playbackState.ready}
+          onChange={event => transport.current?.seek(event.currentTarget.valueAsNumber, undefined, true)} />
+      </label>}
+      <div className="shot-actions replay-immersive-transport">
+        <button type="button" className="button button-secondary" disabled={busy || index <= 0}
+          onClick={() => select(playlist[index - 1])}>Previous</button>
+        <button type="button" className="button" disabled={!playbackState.ready || !playlist.length}
+          onClick={() => immersiveBounds ? transport.current?.toggle(immersiveBounds) : select(playlist[0])}>
+          {playbackState.playing ? 'Pause' : 'Play'}
+        </button>
+        <button type="button" className="button button-secondary" disabled={busy || index >= playlist.length - 1}
+          onClick={() => select(playlist[index + 1])}>Next</button>
+        <button type="button" className="button button-secondary" disabled={!playbackState.ready || !current}
+          onClick={() => select(current)}>Replay shot</button>
+      </div>
+      {actions}
+      {error && <p role="alert">{error}</p>}
+    </div>, overlay)
+
   return <section hidden={!active} className="replay-workspace" aria-label={reviewing ? 'Shot review' : 'Shots'}>
+    {immersiveControls}
     {error && <div className="shot-feedback"><p role="alert">{error}</p>
       <button type="button" className="button button-secondary" disabled={busy} onClick={reload}>Reload shots</button></div>}
     {!shots && !error && <p role="status">Loading shots…</p>}
@@ -253,16 +303,7 @@ export function ReplayShots({ userId, frameId, frameNumber, path, transport, pla
               style={{ left: `${100 * boundsOf(shot).start / replayEnd}%` }} />)}
           </button>
         </div>}
-        {current && <div className="shot-actions shot-view-actions">
-          {favouritesAvailable && <button type="button" className="button button-secondary" disabled={busy}
-            aria-pressed={!!current.favourite} onClick={() => void favourite(current)}>
-            {current.favourite ? '★ Favourited' : '☆ Favourite'}
-          </button>}
-          <button type="button" className="button button-secondary" disabled={exporting}
-            onClick={() => void download(current, number)}><Icon name="download" size={16} />Download Shot</button>
-          {exporting && <button type="button" className="button button-secondary" onClick={cancelExport}>Cancel export</button>}
-          {exporting && <p role="status">Preparing shot…</p>}
-        </div>}
+        {!overlay && actions}
         {!!ready.length && active && <ShotCollection shots={ready} selected={selected} onSelect={select} sign={sign} />}
         {!!total && !ready.length && <p>No shots are ready to watch yet.</p>}
       </>}

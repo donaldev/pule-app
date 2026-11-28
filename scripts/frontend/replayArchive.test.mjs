@@ -15,6 +15,7 @@ const useRef=initial=>{const h=globalThis.archive,i=h.cursor++;return h.states[i
 const useEffect=(fn,deps)=>{const h=globalThis.archive;if(!h.inViewer)return;if(!h.viewerDeps||deps.some((v,i)=>v!==h.viewerDeps[i])){h.viewerCleanup?.();h.viewerDeps=deps;h.viewerCleanup=fn()}};
 const downloadFrameReplay=async()=>{};
 const replayPlaybackLinkSeconds=300;
+const useImmersiveReplay=()=>({immersive:false, controls:true});
 const createReplayPlayback=(_video,sign,_lifetime,update)=>{
  const retry=()=>sign().then(()=>update({ready:true}),()=>update({error:'Check your connection and access'}));
  void retry();
